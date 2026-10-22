@@ -124,7 +124,13 @@
     scribbleDominance: 1.5, // ช่องระบายต้องมีหมึกมากกว่าช่องกากบาทกี่เท่า (ภาพเบลอทำให้ค่าห่างกันน้อยลง)
     cellMargin: 0.12,     // ตัดขอบช่องออกกี่ส่วนก่อนนับหมึก
     displayWidth: 1200,   // ความกว้างภาพตารางที่ส่งกลับไปแสดงผล
+    detectLongSide: 0,    // หากรอบตารางบนภาพย่อด้านยาวเท่านี้ (0 = ใช้ภาพขนาดทำงาน) ตัวอ่านภาพสำรองใช้ให้เร็วขึ้น
+    directDisplay: false, // ดัดภาพสีลงขนาดแสดงผลโดยตรง (เร็วกว่า แต่ภาพหยาบกว่าเล็กน้อย)
   };
+
+  // ค่าสำหรับตัวอ่านภาพสำรอง (cvlite.js) ทำงานบนภาพเล็กลง เพราะโหมดล็อกดาวน์ของ iPhone ปิด JIT ด้วย
+  // ทดสอบแล้วอ่านรูปทดสอบทุกรูปได้ผลเท่ากับค่าปกติ (npm test รันทั้งสองแบบ)
+  const LITE_OPTS = { workLongSide: 1600, warpWidth: 1600, detectLongSide: 1000, directDisplay: true };
 
   function gridShape(t) {
     return {
@@ -256,8 +262,23 @@
     return Math.abs(a) / 2;
   }
 
-  /** หากรอบสี่เหลี่ยมขนาดใหญ่ที่อาจเป็นตาราง เรียงจากใหญ่ไปเล็ก */
-  function findQuadCandidates(cv, gray, minAreaFrac, maxCandidates) {
+  /** หากรอบสี่เหลี่ยมขนาดใหญ่ที่อาจเป็นตาราง เรียงจากใหญ่ไปเล็ก (detectLongSide: หาบนภาพย่อแล้วขยายพิกัดกลับ) */
+  function findQuadCandidates(cv, gray, minAreaFrac, maxCandidates, detectLongSide) {
+    const long = Math.max(gray.cols, gray.rows);
+    if (detectLongSide && long > detectLongSide * 1.05) {
+      const small = new cv.Mat();
+      try {
+        const f = detectLongSide / long;
+        cv.resize(gray, small, new cv.Size(Math.round(gray.cols * f), Math.round(gray.rows * f)), 0, 0, cv.INTER_AREA);
+        const fx = gray.cols / small.cols, fy = gray.rows / small.rows;
+        return findQuadCandidates(cv, small, minAreaFrac, maxCandidates).map((c) => ({
+          quad: c.quad.map((p) => [(p[0] + 0.5) * fx - 0.5, (p[1] + 0.5) * fy - 0.5]),
+          area: c.area * fx * fy,
+        }));
+      } finally {
+        small.delete();
+      }
+    }
     const mats = [];
     const keep = (m) => (mats.push(m), m);
     try {
@@ -358,6 +379,9 @@
     const { w, h } = quadSize(quad);
     const { W, H } = warpSize(w, h, o);
     const P = o.pad;
+    // ค่าที่เป็นพิกเซลตั้งไว้สำหรับภาพกว้าง 2400 ย่อ/ขยายตามขนาดที่ใช้จริง (ตัวอ่านภาพสำรองใช้ภาพเล็กกว่า)
+    const unit = Math.max(W, H) / 2400;
+    const sp = (n) => Math.max(1, Math.round(n * unit));
     const mats = [];
     const keep = (m) => (mats.push(m), m);
     try {
@@ -390,7 +414,7 @@
       cv.morphologyEx(bw, vert, cv.MORPH_OPEN, kv);
 
       // เส้นกรอบนอกรู้ตำแหน่งจากการดัดภาพ จึงหาเฉพาะเส้นด้านใน
-      const inner = P + 25;
+      const inner = P + sp(25);
       const px = reduceProfile(cv, vert, 0);
       const py = reduceProfile(cv, horiz, 1);
       for (let i = 0; i < inner; i++) { px[i] = 0; px[W - 1 - i] = 0; }
@@ -403,12 +427,12 @@
       // หมึกที่เหลือหลังลบเส้นตาราง
       const grid = keep(new cv.Mat());
       cv.bitwise_or(horiz, vert, grid);
-      const k7 = keep(cv.Mat.ones(7, 7, cv.CV_8U));
+      const k7 = keep(cv.Mat.ones(sp(7), sp(7), cv.CV_8U));
       cv.dilate(grid, grid, k7);
       cv.bitwise_not(grid, grid);
       const ink = keep(new cv.Mat());
       cv.bitwise_and(bw, grid, ink);
-      const k3 = keep(cv.Mat.ones(3, 3, cv.CV_8U));
+      const k3 = keep(cv.Mat.ones(sp(3), sp(3), cv.CV_8U));
       cv.morphologyEx(ink, ink, cv.MORPH_OPEN, k3);
 
       const cellInk = (rowIdx, colIdx) => {
@@ -453,7 +477,9 @@
 
       // ภาพตารางสีสำหรับแสดงผล
       let display = null;
-      if (src) {
+      if (src && o.directDisplay) {
+        display = warpDisplay(cv, src, quad, o);
+      } else if (src) {
         const wc = keep(new cv.Mat());
         cv.warpPerspective(src, wc, M, new cv.Size(W, H), cv.INTER_LINEAR, cv.BORDER_REPLICATE, new cv.Scalar());
         const scale = Math.min(1, o.displayWidth / W);
@@ -559,6 +585,8 @@
     const { w, h } = quadSize(quad);
     const { W, H } = warpSize(w, h, o);
     const P = o.pad;
+    const unit = Math.max(W, H) / 2400;
+    const sp = (n) => Math.max(1, Math.round(n * unit));
     const mats = [];
     const keep = (m) => (mats.push(m), m);
     try {
@@ -584,22 +612,22 @@
       const vert = keep(new cv.Mat());
       cv.morphologyEx(bw, horiz, cv.MORPH_OPEN, kh);
       cv.morphologyEx(bw, vert, cv.MORPH_OPEN, kv);
-      const inner = P + 14;
+      const inner = P + sp(14);
       const pxv = reduceProfile(cv, vert, 0), pyh = reduceProfile(cv, horiz, 1);
       for (let i = 0; i < inner; i++) { pxv[i] = 0; pxv[W - 1 - i] = 0; pyh[i] = 0; pyh[H - 1 - i] = 0; }
-      const xs = recoverMissing(regularize([P].concat(peaksUnknown(pxv, inner, 18), [W - 1 - P])), pxv);
-      const ys = recoverMissing(regularize([P].concat(peaksUnknown(pyh, inner, 18), [H - 1 - P])), pyh);
+      const xs = recoverMissing(regularize([P].concat(peaksUnknown(pxv, inner, sp(18)), [W - 1 - P])), pxv);
+      const ys = recoverMissing(regularize([P].concat(peaksUnknown(pyh, inner, sp(18)), [H - 1 - P])), pyh);
       const C = xs.length - 1, R = ys.length - 1;
       if (C < 3 || R < 3 || C > 80 || R > 80) return null;
 
       const grid = keep(new cv.Mat());
       cv.bitwise_or(horiz, vert, grid);
-      const k7 = keep(cv.Mat.ones(7, 7, cv.CV_8U));
+      const k7 = keep(cv.Mat.ones(sp(7), sp(7), cv.CV_8U));
       cv.dilate(grid, grid, k7);
       cv.bitwise_not(grid, grid);
       const ink = keep(new cv.Mat());
       cv.bitwise_and(bw, grid, ink);
-      const k3 = keep(cv.Mat.ones(3, 3, cv.CV_8U));
+      const k3 = keep(cv.Mat.ones(sp(3), sp(3), cv.CV_8U));
       cv.morphologyEx(ink, ink, cv.MORPH_OPEN, k3);
       const fill = [];
       for (let r = 0; r < R; r++) {
@@ -709,7 +737,7 @@
       }
       const gray = keep(new cv.Mat());
       cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-      const candidates = findQuadCandidates(cv, gray, 0.15, 3);
+      const candidates = findQuadCandidates(cv, gray, 0.15, 3, o.detectLongSide);
       if (!candidates.length) return { ok: false, error: 'not_found' };
       let best = null;
       for (const cand of candidates.slice().reverse()) {
@@ -755,7 +783,7 @@
       }
       const gray = keep(new cv.Mat());
       cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-      const candidates = findQuadCandidates(cv, gray, 0.15, 6);
+      const candidates = findQuadCandidates(cv, gray, 0.15, 6, o.detectLongSide);
       if (!candidates.length) {
         return { ok: false, error: 'not_found' };
       }
@@ -817,6 +845,7 @@
 
   return {
     TEMPLATES,
+    LITE_OPTS,
     DEFAULTS,
     FLAG_TEXT,
     LATIN,

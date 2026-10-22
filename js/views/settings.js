@@ -3,6 +3,7 @@ import { h, icon, toast, confirmDialog } from '../ui.js';
 import { appBar, go } from '../nav.js';
 import { backupAll, readBackup, restoreBackup } from '../export.js';
 import { install, isStandalone, platform, requestPersistence, APP_VERSION, REPO_URL } from '../pwa.js';
+import { capabilities, isLimited, lockdownHelp, lockdownLikely } from '../env.js';
 
 function pickFile(accept) {
   return new Promise((resolve) => {
@@ -78,6 +79,20 @@ export async function settingsView(root) {
           go('#/');
         } catch (err) { toast(err.message || String(err), 'error'); }
       } }, 'กู้คืนจากไฟล์'))));
+
+  // ---------------------------------------------------------------- ความสามารถของเบราว์เซอร์
+  const c = capabilities();
+  const row = (label, value, ok) => h('div', null, h('dt', null, label), h('dd', { class: ok ? '' : 'warn' }, value));
+  main.append(h('section', { class: 'form-section', id: 'device-status' },
+    h('h2', { class: 'section-title' }, 'การทำงานบนเครื่องนี้'),
+    h('dl', { class: 'status-list' },
+      row('ที่เก็บข้อมูล', c.storage === 'indexeddb' ? 'ปกติ (IndexedDB)'
+        : c.images === 'memory' ? 'สำรอง: เก็บคะแนนได้ แต่รูปจะหายเมื่อปิดแอป' : 'สำรอง (localStorage และ Cache Storage)', c.storage === 'indexeddb'),
+      row('ตัวอ่านภาพ', c.wasm ? 'ปกติ (OpenCV ด้วย WebAssembly)' : 'สำรอง (JavaScript ล้วน ช้ากว่า)', c.wasm),
+      row('กล้องสด', c.camera ? 'ใช้ได้' : 'ใช้ไม่ได้ ใช้ปุ่มถ่ายรูปแทน', c.camera)),
+    isLimited(c) ? h('p', { class: 'section-help' }, lockdownLikely(c)
+      ? 'เครื่องนี้น่าจะเปิดโหมดล็อกดาวน์ (Lockdown Mode) อยู่ แอปยังใช้งานได้ แต่ทำงานแบบจำกัด' : 'เบราว์เซอร์นี้ปิดบางฟีเจอร์ แอปยังใช้งานได้ แต่ทำงานแบบจำกัด') : null,
+    isLimited(c) ? lockdownHelp() : null));
 
   // ---------------------------------------------------------------- พื้นที่จัดเก็บ
   const storageText = h('p', { class: 'section-help' }, 'กำลังตรวจสอบ…');

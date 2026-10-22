@@ -63,24 +63,100 @@ const chooseFile = async (buttonText, file) => {
 };
 
 try {
-  console.log('เบราว์เซอร์ที่ไม่มี IndexedDB/WebAssembly (จำลอง iPhone ที่เปิดโหมดล็อกดาวน์)');
+  console.log('จำลอง iPhone ที่เปิดโหมดล็อกดาวน์: ไม่มี IndexedDB, WebAssembly, JIT และกล้องสด');
   {
-    const ctx = await browser.newContext({
+    // --jitless ปิด JIT และ WebAssembly ของ V8 ทั้งในหน้าเว็บและ worker เหมือนโหมดล็อกดาวน์ของ Safari
+    const lockBrowser = await chromium.launch({ args: ['--js-flags=--jitless'], env: { ...process.env, LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8' } });
+    const ctx = await lockBrowser.newContext({
       viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'th-TH',
       userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
     });
     await ctx.addInitScript(() => {
+      // ?exclude=1 จำลองการปิดโหมดล็อกดาวน์เฉพาะเว็บนี้ (กลับมามี IndexedDB)
+      if (new URLSearchParams(location.search).has('exclude')) return;
       Object.defineProperty(window, 'indexedDB', { get: () => undefined, configurable: true });
-      Object.defineProperty(window, 'WebAssembly', { value: undefined, configurable: true, writable: true });
+      if (navigator.mediaDevices) Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { value: undefined, configurable: true });
+    });
+    const p = await ctx.newPage();
+    const errs = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    p.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
+    const pick = async (buttonText, file) => {
+      const [chooser] = await Promise.all([p.waitForEvent('filechooser'), p.getByRole('button', { name: buttonText }).click()]);
+      await chooser.setFiles(file);
+    };
+    await p.goto(base);
+    await p.locator('#limited-notice').waitFor({ timeout: 60000 });
+    const note = await p.locator('#limited-notice').innerText();
+    check(/โหมดล็อกดาวน์/.test(note) && /ช้าลง/.test(note) && /กล้องสด/.test(note), 'เปิดแอปได้ในโหมดจำกัด พร้อมบอกว่าขาดอะไร');
+    await p.getByRole('button', { name: 'วิธีใช้เต็มความสามารถ' }).click();
+    check(/การตั้งค่าเว็บไซต์/.test(await p.locator('#limited-notice').innerText()), 'บอกวิธีปิดโหมดล็อกดาวน์เฉพาะเว็บนี้ (ไม่ต้องปิดทั้งเครื่อง)');
+    await p.screenshot({ path: path.join(out, '00-lockdown-home.png'), fullPage: true });
+
+    await p.locator('#choice-new').click();
+    await p.locator('#f-code').fill('04-012-301');
+    await p.locator('#f-name').fill('เทคโนโลยีสารสนเทศ');
+    await p.locator('#f-exam').fill('สอบย่อย');
+    let t0 = Date.now();
+    await pick('เลือกรูปจากเครื่อง', fx('key.jpg'));
+    await p.locator('.key-status.ok, .key-status.error').first().waitFor({ timeout: 240000 });
+    const keyMs = Date.now() - t0;
+    const lkKey = await p.$$eval('.answer-grid .grid-row:not(.grid-head)', (rows) => rows.map((r) => {
+      const i = [...r.querySelectorAll('.cell-choice')].findIndex((c) => c.classList.contains('sel'));
+      return i < 0 ? '-' : 'ABCDE'[i];
+    }).join(''));
+    check(lkKey === TRUTH.key, `อ่านใบเฉลยด้วยตัวอ่านภาพสำรองถูกทุกข้อ (${(keyMs / 1000).toFixed(1)} วินาที ไม่มี JIT)`);
+    await p.getByRole('button', { name: 'บันทึกแล้วเริ่มตรวจ' }).click();
+    await p.locator('#student-no').waitFor();
+    const lkExam = p.url().split('#/exam/')[1].split('/')[0];
+    check(await p.locator('.segmented').isHidden(), 'ซ่อนโหมดกล้องสดเมื่อเบราว์เซอร์ไม่ให้ใช้กล้องสด');
+    t0 = Date.now();
+    await pick('เลือกรูปจากเครื่อง', fx('student-02.jpg'));
+    await p.locator('.score-big').waitFor({ timeout: 240000 });
+    const scanMs = Date.now() - t0;
+    const lkScore = Number(await p.locator('.score-big').textContent());
+    check(lkScore === scoreFor(2), `ตรวจกระดาษได้ ${lkScore} คะแนน (คาดไว้ ${scoreFor(2)}) ใช้เวลา ${(scanMs / 1000).toFixed(1)} วินาที`);
+    await p.screenshot({ path: path.join(out, '00-lockdown-review.png'), fullPage: true });
+    await p.locator('#btn-save').click();
+    await p.getByText('บันทึกเลขที่ 1 แล้ว').waitFor();
+
+    await p.reload();
+    await p.goto(base + `#/exam/${lkExam}/results`);
+    await p.locator('.score-table').waitFor();
+    const lkRows = await p.$$eval('.score-table tbody tr', (trs) => trs.map((tr) => [tr.cells[0].textContent.trim(), tr.cells[1].textContent.trim()]));
+    check(JSON.stringify(lkRows) === JSON.stringify([['1', `${scoreFor(2)}/60`]]), `โหลดหน้าใหม่แล้วข้อมูลยังอยู่ (ที่เก็บสำรอง) ${JSON.stringify(lkRows)}`);
+    await p.goto(base + `#/exam/${lkExam}/result/1`);
+    await p.locator('.score-big').waitFor();
+    check(await p.locator('.sheet-figure').count() === 1, 'รูปกระดาษที่ตรวจแล้วยังอยู่ (Cache Storage)');
+    await p.goto(base + '#/settings');
+    await p.locator('#device-status').waitFor();
+    check(/สำรอง/.test(await p.locator('#device-status').innerText()), 'หน้าตั้งค่าบอกว่าใช้ที่เก็บและตัวอ่านภาพสำรอง');
+
+    // ปิดโหมดล็อกดาวน์เฉพาะเว็บนี้: ข้อมูลในที่เก็บสำรองย้ายเข้า IndexedDB
+    await p.goto(base + '?exclude=1#/');
+    await p.locator('#choice-new').waitFor({ timeout: 60000 });
+    const moved = await p.evaluate(() => localStorage.getItem('cc.db.v1.exams') === null);
+    check(moved && await p.locator('.exam-item').count() === 1, 'ปิดโหมดล็อกดาวน์เฉพาะเว็บแล้ว ข้อมูลย้ายเข้าที่เก็บปกติครบ');
+    await p.goto(base + `?exclude=1#/exam/${lkExam}/result/1`);
+    await p.locator('.score-big').waitFor();
+    check(await p.locator('.sheet-figure').count() === 1, 'รูปกระดาษย้ายมาด้วย');
+    check(errs.length === 0, `ไม่มีข้อผิดพลาดในโหมดจำกัด${errs.length ? ': ' + errs.join(' | ') : ''}`);
+    await lockBrowser.close();
+  }
+
+  console.log('เบราว์เซอร์ที่ไม่ให้เว็บเก็บข้อมูลเลย');
+  {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'th-TH' });
+    await ctx.addInitScript(() => {
+      Object.defineProperty(window, 'indexedDB', { get: () => undefined, configurable: true });
+      Object.defineProperty(window, 'localStorage', { get: () => { throw new DOMException('blocked', 'SecurityError'); }, configurable: true });
     });
     const p = await ctx.newPage();
     const errs = [];
     p.on('pageerror', (e) => errs.push(e.message));
     await p.goto(base);
     await p.getByText('เบราว์เซอร์นี้ยังใช้ CheckChoice ไม่ได้').waitFor();
-    const text = await p.locator('#env-help').innerText();
-    check(/IndexedDB/.test(text) && /WebAssembly/.test(text) && /โหมดล็อกดาวน์/.test(text),
-      'แสดงหน้าบอกสาเหตุและวิธีปิดโหมดล็อกดาวน์ แทนข้อความผิดพลาด');
+    check(/คุกกี้/.test(await p.locator('#env-help').innerText()), 'แสดงหน้าบอกสาเหตุและวิธีแก้ แทนข้อความผิดพลาด');
     check(errs.length === 0, `ไม่มีข้อผิดพลาดที่ไม่ได้จัดการ${errs.length ? ': ' + errs.join(' | ') : ''}`);
     await p.screenshot({ path: path.join(out, '00-env-help.png'), fullPage: true });
     await ctx.close();

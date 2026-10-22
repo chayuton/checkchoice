@@ -35,12 +35,12 @@ export function toCanvas(source, srcW, srcH, maxLong = WORK_LONG_SIDE) {
   return canvas;
 }
 
-/** แปลงไฟล์รูปเป็น canvas พร้อมประมวลผล */
-export async function fileToCanvas(file) {
+/** แปลงไฟล์รูปเป็น canvas พร้อมประมวลผล (maxLong: ด้านยาวสูงสุด ตัวอ่านภาพสำรองใช้ภาพเล็กกว่า) */
+export async function fileToCanvas(file, maxLong = WORK_LONG_SIDE) {
   if (!file || !/^image\//.test(file.type || 'image/')) throw new Error('ไฟล์นี้ไม่ใช่รูปภาพ');
   const img = await decode(file);
   const w = img.width || img.naturalWidth, h = img.height || img.naturalHeight;
-  const canvas = toCanvas(img, w, h);
+  const canvas = toCanvas(img, w, h, maxLong);
   if (img.close) img.close();
   return canvas;
 }

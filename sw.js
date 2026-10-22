@@ -1,7 +1,7 @@
 /* Service worker: เก็บไฟล์แอปไว้ในเครื่องเพื่อใช้งานออฟไลน์
    - ไฟล์ใน vendor/ fonts/ icons/ (ใหญ่และไม่ค่อยเปลี่ยน): ใช้จากแคชก่อน
    - ไฟล์แอปอื่น ๆ: ดึงจากเครือข่ายก่อน (ได้เวอร์ชันล่าสุดเสมอ) ถ้าออฟไลน์ใช้จากแคช */
-const CACHE = 'checkchoice-v3';
+const CACHE = 'checkchoice-v4';
 const SHELL = [
   './',
   'index.html',
@@ -26,6 +26,7 @@ const SHELL = [
   'js/omr/core.js',
   'js/omr/client.js',
   'js/omr/worker.js',
+  'js/omr/cvlite.js',
   'js/views/home.js',
   'js/views/exam.js',
   'js/views/scan.js',

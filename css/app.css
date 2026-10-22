@@ -33,6 +33,7 @@
   --green-soft: #E1F2E8;
   --hl: #FFE36E;          /* ปากกาเน้นข้อความ: ต้องยืนยัน */
   --hl-edge: #D19A00;
+  --warn-text: #8A5A00;   /* ข้อความเตือน (อ่านง่ายบนพื้นขาว) */
   --focus: #2440B3;
   --font: 'Plex Thai Looped', 'IBM Plex Sans Thai Looped', 'Sarabun', 'Noto Sans Thai', 'Leelawadee UI', 'Thonburi', system-ui, sans-serif;
   --radius: 10px;
@@ -61,6 +62,7 @@
     --green-soft: #1B3527;
     --hl: #5E5113;
     --hl-edge: #E7C443;
+    --warn-text: #E7C443;
     --focus: #B5C5FF;
     color-scheme: dark;
   }
@@ -367,6 +369,16 @@ button, input, select { font: inherit; color: inherit; }
 .qr-box { display: grid; place-items: center; margin: 6px 0 12px; }
 .qr-canvas { display: block; border: 1px solid var(--rule); border-radius: 8px; background: #fff; image-rendering: pixelated; }
 .link-input { font-size: 13px; color: var(--graphite-2); min-height: 40px; }
+.limited-notice { border-left-color: var(--hl-edge); margin: 0 0 18px; }
+.status-list { display: grid; gap: 6px; margin: 8px 0; }
+.status-list div { display: grid; grid-template-columns: 7.5em 1fr; gap: 8px; align-items: baseline; }
+.status-list dt { color: var(--graphite-2); font-size: 14px; }
+.status-list dd { margin: 0; font-weight: 600; }
+.status-list dd.warn { color: var(--warn-text); }
+.limited-title { font-weight: 600; margin-bottom: 4px; }
+.limited-notice .help-steps { margin: 4px 0 8px; }
+.limited-details { border-top: 1px solid var(--rule); margin-top: 6px; padding-top: 8px; }
+.limited-notice .btn-row { margin-top: 6px; }
 .desktop-hint { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; border-left-color: var(--ink); }
 .desktop-hint p { flex: 1 1 240px; }
 .import-facts { display: grid; grid-template-columns: repeat(3, 1fr); margin: 12px 0; border: 1px solid var(--rule); border-radius: 8px; }

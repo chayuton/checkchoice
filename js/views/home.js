@@ -4,6 +4,7 @@ import { appBar } from '../nav.js';
 import { listExams, listResults, listTemplates, examTitle } from '../store.js';
 import { install, isStandalone, platform } from '../pwa.js';
 import { transferButton } from '../transfer-ui.js';
+import { limitedNotice } from '../env.js';
 
 function installHint() {
   if (isStandalone()) return null;
@@ -65,6 +66,8 @@ export async function homeView(root) {
   }));
   const main = h('main', { class: 'page page-home' });
   root.append(main);
+  const limited = limitedNotice();
+  if (limited) main.append(limited);
   const hint = installHint();
   if (hint) main.append(hint);
 

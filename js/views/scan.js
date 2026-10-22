@@ -7,9 +7,10 @@ import {
 import { reviewPanel } from '../review-panel.js';
 import { displayToCanvas } from '../overlay.js';
 import { pickImage, fileToCanvas, canvasImageData, canvasToBlob, LiveCamera } from '../capture.js';
-import { initOMR, readSheet } from '../omr/client.js';
+import { initOMR, readSheet, omrEngine, workLongSide } from '../omr/client.js';
 import { requestPersistence, platform } from '../pwa.js';
 import { transferButton } from '../transfer-ui.js';
+import { capabilities } from '../env.js';
 
 export function errorMessage(res) {
   if (res.error === 'not_found') return 'หาตารางคำตอบไม่พบ ถ่ายให้เห็นตารางครบทั้ง 4 มุม ให้ตารางเต็มภาพมากที่สุด และวางกระดาษบนพื้นเรียบ';
@@ -34,7 +35,9 @@ export async function scanView(root, id) {
   const t = examTitle(exam);
   const keyCount = exam.key.slice(0, exam.questionCount).filter((v) => v != null).length;
 
-  let mode = loadPref('cc.mode', 'photo');
+  // กล้องสดต้องใช้ getUserMedia และตัวอ่านภาพที่เร็วพอ (โหมดล็อกดาวน์ของ iPhone ปิดทั้งสองอย่าง)
+  const liveOk = LiveCamera.supported() && capabilities().wasm;
+  let mode = liveOk ? loadPref('cc.mode', 'photo') : 'photo';
   let autoCapture = loadPref('cc.auto', '1') === '1';
   let current = null;   // ผลที่รอตรวจทาน { no, panel, display, geom }
   let camera = null;
@@ -120,6 +123,8 @@ export async function scanView(root, id) {
   }
 
   function renderTabs() {
+    modeTabs.hidden = !liveOk;
+    if (!liveOk) { clear(modeTabs); return; }
     clear(modeTabs).append(
       h('button', { type: 'button', role: 'tab', 'aria-selected': mode === 'photo' ? 'true' : 'false', class: mode === 'photo' ? 'on' : '',
         onclick: () => switchMode('photo') }, icon('camera'), 'ถ่ายรูป'),
@@ -200,7 +205,7 @@ export async function scanView(root, id) {
     const file = await pickImage({ capture });
     if (!file) return;
     try {
-      const canvas = await fileToCanvas(file);
+      const canvas = await fileToCanvas(file, await workLongSide());
       await process(canvas);
     } catch (err) {
       setStatus(err.message || String(err), 'error');
@@ -210,7 +215,8 @@ export async function scanView(root, id) {
   async function process(canvas) {
     if (busy) return;
     busy = true;
-    setStatus('กำลังอ่านคำตอบ…', 'busy');
+    const eng = omrEngine();
+    setStatus(eng && eng.lite ? 'กำลังอ่านคำตอบ… (ตัวอ่านภาพสำรอง อาจใช้เวลา 10–30 วินาที)' : 'กำลังอ่านคำตอบ…', 'busy');
     captureArea.classList.add('is-busy');
     try {
       const res = await readSheet(canvasImageData(canvas), exam.template);
@@ -270,7 +276,7 @@ export async function scanView(root, id) {
     current = null;
     clear(reviewArea);
     actionBar.hidden = true;
-    modeTabs.hidden = false;
+    modeTabs.hidden = !liveOk;
     renderCapture();
   }
 
@@ -305,7 +311,7 @@ export async function scanView(root, id) {
       renderNoOptions();
       clear(reviewArea);
       actionBar.hidden = true;
-      modeTabs.hidden = false;
+      modeTabs.hidden = !liveOk;
       renderCapture();
     } catch (err) {
       toast(`บันทึกไม่สำเร็จ: ${err.message || err}`, 'error');

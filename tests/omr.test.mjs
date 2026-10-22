@@ -1,5 +1,7 @@
 // ชุดทดสอบแกนอ่านกระดาษคำตอบ: รันด้วย `npm test`
 // ใช้ OpenCV.js ตัวเดียวกับในเว็บแอป และรูปถ่ายกระดาษจริงใน tests/fixtures
+// --lite ใช้ตัวอ่านภาพสำรอง (js/omr/cvlite.js) ด้วยค่าเดียวกับในแอป แทน OpenCV.js
+// OMR_BACKEND=lite / OMR_OPTS='{"workLongSide":1600}' กำหนดเองได้
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -24,7 +26,10 @@ const EXPECTED_FLAGS = {
 const EXPECTED_SCORES = { 'student-02.jpg': 32, 'student-05.jpg': 18, 'student-11.jpg': 26 };
 
 // โมดูล OpenCV.js มีเมธอด then ของ Emscripten จึงห่อไว้ในออบเจกต์ ไม่ให้ await วนไม่รู้จบ
+const LITE = process.argv.includes('--lite') || process.env.OMR_BACKEND === 'lite';
+
 function loadCv() {
+  if (LITE) return Promise.resolve({ cv: require(path.join(root, 'js/omr/cvlite.js')) });
   const mod = require(path.join(root, 'vendor/opencv.js'));
   if (mod && mod.Mat) return Promise.resolve({ cv: mod });
   return new Promise((resolve) => { mod.onRuntimeInitialized = () => resolve({ cv: mod }); });
@@ -43,11 +48,13 @@ function check(cond, msg) {
   else { failures++; console.log('  ✗ ' + msg); }
 }
 
+const BASE = process.env.OMR_OPTS ? JSON.parse(process.env.OMR_OPTS) : process.argv.includes('--lite') ? OMR.LITE_OPTS : {};
+
 function read(cv, file, extra) {
   const mat = loadImage(cv, file);
   try {
     const t0 = Date.now();
-    const res = OMR.readSheet(cv, mat, OMR.TEMPLATES[0], extra);
+    const res = OMR.readSheet(cv, mat, OMR.TEMPLATES[0], Object.assign({}, BASE, extra));
     res.ms = Date.now() - t0;
     return res;
   } finally {
@@ -58,6 +65,7 @@ function read(cv, file, extra) {
 const letter = (d) => (d.choice == null ? (d.flag === 'blank' ? '-' : '?') : LETTERS[d.choice]);
 
 const { cv } = await loadCv();
+console.log(`ตัวอ่านภาพ: ${cv.lite ? 'สำรอง (JavaScript ล้วน)' : 'OpenCV.js'}${Object.keys(BASE).length ? ' ' + JSON.stringify(BASE) : ''}`);
 const tpl = OMR.TEMPLATES[0];
 const fx = (n) => path.join(root, 'tests/fixtures', n);
 const extraDir = process.env.EXTRA_FIXTURES; // รูปเพิ่มเติม (เช่น ภาพหมุน/มืด) สำหรับทดสอบความทนทาน
@@ -112,7 +120,7 @@ for (const name of ['key.jpg', 'student-05.jpg', 'blank.jpg']) {
     const rot = new cv.Mat();
     cv.rotate(mat, rot, code);
     mat.delete();
-    const r = OMR.readSheet(cv, rot, tpl);
+    const r = OMR.readSheet(cv, rot, tpl, BASE);
     rot.delete();
     const got = r.ok ? r.decisions.map(letter).join('') : '';
     const want = name === 'blank.jpg' ? '-'.repeat(60) : TRUTH[name];
@@ -131,7 +139,7 @@ console.log('ตรวจหาโครงตารางจากรูปก�
 const shapeOf = (t) => `${t.blocks}×${t.rowsPerBlock} ตัวเลือก ${t.choices} หัวตาราง ${t.headerRows}${t.numberColumn ? ' มีคอลัมน์เลขข้อ' : ''}`;
 {
   const mat = loadImage(cv, fx('blank.jpg'));
-  const r = OMR.inferTemplate(cv, mat);
+  const r = OMR.inferTemplate(cv, mat, BASE);
   mat.delete();
   check(r.ok && shapeOf(r.template) === shapeOf(tpl), `กระดาษจริง 60 ข้อ: ${r.ok ? shapeOf(r.template) : r.error}`);
 }
@@ -139,7 +147,7 @@ const synth = JSON.parse(readFileSync(fx('synth-truth.json'), 'utf8'));
 for (const [id, T] of Object.entries(synth)) {
   const t = OMR.TEMPLATES.find((x) => x.id === id);
   const mat = loadImage(cv, fx(`synth-${id}-blank.jpg`));
-  const r = OMR.inferTemplate(cv, mat);
+  const r = OMR.inferTemplate(cv, mat, BASE);
   mat.delete();
   check(r.ok && shapeOf(r.template) === shapeOf(t), `กระดาษจำลอง ${id}: ${r.ok ? shapeOf(r.template) : r.error}`);
 }
@@ -149,7 +157,7 @@ for (const [id, T] of Object.entries(synth)) {
   const t = OMR.TEMPLATES.find((x) => x.id === id);
   for (const kind of ['key', 'student']) {
     const mat = loadImage(cv, fx(`synth-${id}-${kind}.jpg`));
-    const r = OMR.readSheet(cv, mat, t);
+    const r = OMR.readSheet(cv, mat, t, BASE);
     mat.delete();
     const got = r.ok ? r.decisions.map(letter).join('') : '';
     const want = T[kind];

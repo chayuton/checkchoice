@@ -7,7 +7,7 @@ import {
 import { drawTemplateMap, uniformGrid, templateThumb } from '../template-draw.js';
 import { pickImage, fileToCanvas, canvasImageData, canvasToBlob } from '../capture.js';
 import { displayToCanvas, blobToImage } from '../overlay.js';
-import { initOMR, inferTemplate } from '../omr/client.js';
+import { initOMR, inferTemplate, workLongSide } from '../omr/client.js';
 
 const OMR = self.OMRCore;
 
@@ -200,7 +200,7 @@ export async function templateEditView(root, id) {
     status.className = 'key-status busy';
     status.textContent = 'กำลังนับแถวและคอลัมน์… (ครั้งแรกต้องโหลดตัวอ่านภาพ อาจใช้เวลาสักครู่)';
     try {
-      const c = await fileToCanvas(file);
+      const c = await fileToCanvas(file, await workLongSide());
       const res = await inferTemplate(canvasImageData(c));
       if (!res.ok) throw new Error(res.error === 'not_found'
         ? 'หาตารางในรูปไม่พบ ถ่ายให้เห็นตารางครบทั้ง 4 มุมและให้ตารางเต็มภาพมากที่สุด'

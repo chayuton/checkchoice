@@ -8,7 +8,7 @@ import {
 import { answerGrid } from '../grid.js';
 import { drawSheet, displayToCanvas, blobToImage } from '../overlay.js';
 import { pickImage, fileToCanvas, canvasImageData, canvasToBlob } from '../capture.js';
-import { initOMR, readSheet } from '../omr/client.js';
+import { initOMR, readSheet, workLongSide } from '../omr/client.js';
 import { requestPersistence } from '../pwa.js';
 import { openTransferDialog } from '../transfer-ui.js';
 import { errorMessage } from './scan.js';
@@ -183,7 +183,7 @@ export async function examView(root, id, presetTemplateId) {
     keyStatus.className = 'key-status busy';
     keyStatus.textContent = 'กำลังอ่านใบเฉลย… (ครั้งแรกต้องโหลดตัวอ่านภาพ อาจใช้เวลาสักครู่)';
     try {
-      const canvas = await fileToCanvas(file);
+      const canvas = await fileToCanvas(file, await workLongSide());
       const res = await readSheet(canvasImageData(canvas), exam.template);
       if (!res.ok) throw new Error(errorMessage(res));
       newOriginal = canvas;

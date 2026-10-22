@@ -13,7 +13,8 @@ import { libraryView } from './views/library.js';
 import { templatesView, templateDetailView, templateEditView, templatePrintView } from './views/templates.js';
 import { trainingView } from './views/training.js';
 import { install } from './pwa.js';
-import { environmentProblems, environmentHelp, PROBLEM } from './env.js';
+import { initStorage } from './db.js';
+import { detectCapabilities, environmentHelp } from './env.js';
 
 const routes = [
   [/^#\/?$/, (root) => homeView(root)],
@@ -46,12 +47,12 @@ window.addEventListener('checkchoice:db-ready', () => {
   if (el) el.remove();
 });
 
-// ตรวจความพร้อมของเบราว์เซอร์ก่อนเปิดแอป (เช่น iPhone ที่เปิดโหมดล็อกดาวน์จะไม่มี IndexedDB/WebAssembly)
-environmentProblems().then((problems) => {
-  const root = document.getElementById('app');
-  const storageOk = !problems.includes(PROBLEM.indexedDB) && !problems.includes(PROBLEM.storageBlocked);
-  if (!problems.length) { startRouter(routes); return; }
-  environmentHelp(root, problems, storageOk ? () => startRouter(routes) : null);
+// เลือกที่เก็บข้อมูลก่อนเปิดแอป: ปกติใช้ IndexedDB ถ้าเบราว์เซอร์ปิดไว้ (เช่น iPhone ที่เปิดโหมดล็อกดาวน์)
+// ใช้ที่เก็บสำรองแทน และเปิดหน้าอธิบายเฉพาะเมื่อเก็บข้อมูลไม่ได้เลย
+initStorage().then((storage) => {
+  const c = detectCapabilities(storage);
+  if (c.storage === 'none') { environmentHelp(document.getElementById('app')); return; }
+  startRouter(routes);
 });
 
 // ---------------------------------------------------------------------------
