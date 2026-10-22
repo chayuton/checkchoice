@@ -3,7 +3,7 @@
  *
  * ใช้แทน OpenCV.js เมื่อเบราว์เซอร์ปิด WebAssembly เช่น Safari บน iPhone ที่เปิดโหมดล็อกดาวน์
  * ฟังก์ชันและพารามิเตอร์เหมือน OpenCV.js (ชื่อ ลำดับอาร์กิวเมนต์ ค่าคงที่ ขอบภาพ) core.js จึงใช้ได้
- * โดยไม่ต้องแก้ ผลลัพธ์ใกล้เคียง OpenCV มาก (ต่างกันระดับการปัดเศษ 1 ค่าสี) ดู tests/cvlite.test.mjs
+ * โดยไม่ต้องแก้ ผลลัพธ์ใกล้เคียง OpenCV มาก (ต่างกันระดับการปัดเศษ 1 ค่าสี) `npm test` รันชุดทดสอบภาพด้วย --lite
  *
  * รองรับเฉพาะ: ภาพ 8 บิต 1 หรือ 4 ช่องสี, kernel สี่เหลี่ยมที่เป็น 1 ทั้งหมด, และโหมดที่ core.js ใช้
  * โหมดล็อกดาวน์ปิด JIT ด้วย โค้ดจึงเขียนแบบวนลูปตรง ๆ บน typed array และใช้อัลกอริทึมที่ไม่ขึ้นกับขนาด kernel
@@ -233,40 +233,6 @@
       }
     }
     dst.assign(H, W, CV_8U, out);
-  }
-
-  /** ค่าเฉลี่ยในหน้าต่าง k×k (ขอบแบบ replicate) */
-  function boxMean8u(s, W, H, k) {
-    const r = k >> 1;
-    const rows = new Int32Array(W * H);
-    for (let y = 0; y < H; y++) {
-      const ro = y * W;
-      let acc = 0;
-      for (let i = -r; i <= r; i++) acc += s[ro + (i < 0 ? 0 : i >= W ? W - 1 : i)];
-      rows[ro] = acc;
-      for (let x = 1; x < W; x++) {
-        const add = x + r, rem = x - r - 1;
-        acc += s[ro + (add >= W ? W - 1 : add)] - s[ro + (rem < 0 ? 0 : rem)];
-        rows[ro + x] = acc;
-      }
-    }
-    const out = new Uint8Array(W * H);
-    const area = k * k;
-    const col = new Int32Array(W);
-    for (let i = -r; i <= r; i++) {
-      const yy = i < 0 ? 0 : i >= H ? H - 1 : i;
-      for (let x = 0; x < W; x++) col[x] += rows[yy * W + x];
-    }
-    for (let y = 0; y < H; y++) {
-      if (y > 0) {
-        const add = y + r, rem = y - r - 1;
-        const ao = (add >= H ? H - 1 : add) * W, mo = (rem < 0 ? 0 : rem) * W;
-        for (let x = 0; x < W; x++) col[x] += rows[ao + x] - rows[mo + x];
-      }
-      const o = y * W;
-      for (let x = 0; x < W; x++) out[o + x] = Math.round(col[x] / area);
-    }
-    return out;
   }
 
   // ---------------------------------------------------------------- threshold
