@@ -24,12 +24,19 @@ export function openDB() {
       const db = req.result;
       // ถ้าแท็บอื่นเปิดแอปเวอร์ชันใหม่ที่ต้องปรับฐานข้อมูล ให้ปิดการเชื่อมต่อของแท็บนี้แล้วโหลดใหม่
       db.onversionchange = () => { db.close(); location.reload(); };
+      notify('checkchoice:db-ready');
       resolve(db);
     };
     req.onerror = () => reject(req.error);
-    req.onblocked = () => console.warn('รอแท็บอื่นของ CheckChoice ปิดฐานข้อมูลเวอร์ชันเก่า');
+    // แท็บอื่นยังเปิดแอปเวอร์ชันเก่าค้างไว้ (1.1.0 ลงมาไม่ปิดการเชื่อมต่อให้เอง) คำขอนี้จะรอจนแท็บนั้นปิด
+    // ให้หน้าจอบอกผู้ใช้ แทนที่จะค้างเป็นหน้าว่าง
+    req.onblocked = () => notify('checkchoice:db-blocked');
   });
   return dbPromise;
+}
+
+function notify(type) {
+  try { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(type)); } catch (e) { /* ignore */ }
 }
 
 function run(storeNames, mode, fn) {

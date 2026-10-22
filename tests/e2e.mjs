@@ -86,6 +86,39 @@ try {
     await ctx.close();
   }
 
+  console.log('อัปเดตจากเวอร์ชันเก่าขณะที่อีกแท็บยังเปิดแอปเดิมค้างไว้');
+  {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, locale: 'th-TH' });
+    const old = await ctx.newPage();
+    await old.goto(base + 'icons/icon-192.png');
+    // จำลองแท็บของแอปเวอร์ชัน 1.1.0: ฐานข้อมูลเวอร์ชัน 1 ที่ไม่ปิดการเชื่อมต่อเมื่อมีเวอร์ชันใหม่
+    await old.evaluate(() => new Promise((resolve, reject) => {
+      const r = indexedDB.open('checkchoice', 1);
+      r.onupgradeneeded = () => {
+        const d = r.result;
+        d.createObjectStore('exams', { keyPath: 'id' });
+        d.createObjectStore('results', { keyPath: 'id' }).createIndex('examId', 'examId', { unique: false });
+        d.createObjectStore('blobs', { keyPath: 'id' });
+      };
+      r.onsuccess = () => { window.oldDb = r.result; resolve(); };
+      r.onerror = () => reject(r.error);
+    }));
+    const p = await ctx.newPage();
+    await p.goto(base);
+    await p.locator('#db-blocked').waitFor({ timeout: 20000 });
+    check(true, 'แจ้งให้ปิดแท็บเวอร์ชันเก่า แทนการค้างเป็นหน้าว่าง');
+    await p.screenshot({ path: path.join(out, '00b-db-blocked.png') });
+    await old.close();
+    await p.locator('#choice-new').waitFor({ timeout: 20000 });
+    const stores = await p.evaluate(() => new Promise((resolve) => {
+      const r = indexedDB.open('checkchoice');
+      r.onsuccess = () => { const d = r.result; const v = [d.version, [...d.objectStoreNames].join(',')]; d.close(); resolve(v); };
+    }));
+    check(await p.locator('#db-blocked').count() === 0 && stores[0] === 2 && /templates/.test(stores[1]),
+      `ปิดแท็บเก่าแล้วแอปเปิดต่อเอง ฐานข้อมูลเป็นเวอร์ชัน ${stores[0]} (${stores[1]})`);
+    await ctx.close();
+  }
+
   console.log('หน้าแรก');
   await page.goto(base);
   await page.locator('#choice-new').waitFor();

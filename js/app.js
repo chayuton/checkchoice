@@ -35,6 +35,17 @@ const routes = [
   [/^#\/settings$/, (root) => settingsView(root)],
 ];
 
+// แท็บอื่นยังเปิดแอปเวอร์ชันเก่าค้างไว้ ทำให้ปรับที่เก็บข้อมูลเป็นเวอร์ชันใหม่ไม่ได้จนกว่าแท็บนั้นจะปิด
+window.addEventListener('checkchoice:db-blocked', () => {
+  if (document.getElementById('db-blocked')) return;
+  document.body.appendChild(h('div', { id: 'db-blocked', class: 'update-banner db-blocked', role: 'alert' },
+    h('span', null, 'แอปเวอร์ชันใหม่ต้องปรับที่เก็บข้อมูลก่อน กรุณาปิดแท็บหรือหน้าต่างอื่นของ CheckChoice ที่เปิดค้างไว้ แล้วหน้านี้จะเปิดต่อเอง')));
+});
+window.addEventListener('checkchoice:db-ready', () => {
+  const el = document.getElementById('db-blocked');
+  if (el) el.remove();
+});
+
 // ตรวจความพร้อมของเบราว์เซอร์ก่อนเปิดแอป (เช่น iPhone ที่เปิดโหมดล็อกดาวน์จะไม่มี IndexedDB/WebAssembly)
 environmentProblems().then((problems) => {
   const root = document.getElementById('app');
