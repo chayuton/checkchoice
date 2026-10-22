@@ -1,0 +1,15 @@
+{
+  "name": "checkchoice",
+  "version": "1.0.0",
+  "private": true,
+  "description": "เว็บแอปตรวจข้อสอบปรนัยจากรูปถ่ายกระดาษคำตอบ (PWA)",
+  "scripts": {
+    "test": "node tests/omr.test.mjs",
+    "test:e2e": "node tests/e2e.mjs",
+    "serve": "python3 -m http.server 8080"
+  },
+  "devDependencies": {
+    "jpeg-js": "^0.4.4",
+    "playwright": "1.56.0"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "CheckChoice ตรวจข้อสอบปรนัย",
+  "short_name": "CheckChoice",
+  "description": "ตรวจกระดาษคำตอบปรนัยจากรูปถ่าย เทียบกับใบเฉลย และส่งออกคะแนน",
+  "lang": "th",
+  "dir": "ltr",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#E8ECE9",
+  "theme_color": "#FFFFFF",
+  "categories": ["education", "productivity"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
