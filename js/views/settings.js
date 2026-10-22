@@ -97,7 +97,9 @@ export async function settingsView(root) {
   // ---------------------------------------------------------------- พื้นที่จัดเก็บ
   const storageText = h('p', { class: 'section-help' }, 'กำลังตรวจสอบ…');
   main.append(h('section', { class: 'form-section' },
-    h('h2', { class: 'section-title' }, 'พื้นที่จัดเก็บ'), storageText));
+    h('h2', { class: 'section-title' }, 'พื้นที่จัดเก็บ'), storageText,
+    h('p', { class: 'section-help' }, 'ชุดข้อสอบที่ไม่ใช้แล้วลบได้ที่คลังเฉลย (ปุ่มถังขยะท้ายแถว) ผลตรวจและรูปของชุดนั้นจะถูกลบไปด้วย'),
+    h('div', { class: 'btn-row' }, h('a', { class: 'btn btn-quiet', href: '#/library' }, 'จัดการคลังเฉลย'))));
   (async () => {
     const persisted = await requestPersistence();
     let usage = '';

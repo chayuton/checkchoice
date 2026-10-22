@@ -261,6 +261,51 @@ try {
     check((await p2.locator('#btn-import').innerText()).includes('อัปเดต'), 'เปิดลิงก์ซ้ำ แอปรู้ว่ามีชุดข้อสอบนี้แล้ว');
     await other.close();
   }
+  console.log('ลบทั้งรายวิชาในที่เก็บสำรอง (เบราว์เซอร์ที่ไม่มี IndexedDB)');
+  {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'th-TH' });
+    await ctx.addInitScript(() => { Object.defineProperty(window, 'indexedDB', { get: () => undefined, configurable: true }); });
+    const p = await ctx.newPage();
+    const errs = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(link);
+    await p.locator('#btn-import').click();
+    await p.locator('#student-no').waitFor();
+    const [chooser] = await Promise.all([p.waitForEvent('filechooser'), p.getByRole('button', { name: 'เลือกรูปจากเครื่อง' }).click()]);
+    await chooser.setFiles(fx('student-02.jpg'));
+    await p.locator('.score-big').waitFor({ timeout: 90000 });
+    await p.locator('#btn-save').click();
+    await p.getByText('บันทึกเลขที่ 1 แล้ว').waitFor();
+    // ชุดที่สองของวิชาเดียวกัน (แตะเฉลยเอง 1 ข้อ)
+    await p.goto(base + '#/exam/new');
+    await p.locator('#f-code').fill('04-012-301');
+    await p.locator('#f-name').fill('เทคโนโลยีสารสนเทศ');
+    await p.locator('#f-exam').fill('สอบย่อย 2');
+    await p.locator('#f-count').fill('1');
+    await p.locator('.answer-grid .cell-choice').first().click();
+    await p.getByRole('button', { name: 'บันทึกแล้วเริ่มตรวจ' }).click();
+    await p.locator('#student-no').waitFor();
+    await p.goto(base + '#/library');
+    await p.locator('.course-delete').waitFor();
+    check(await p.locator('.library-list .exam-item').count() === 2, 'คลังเฉลยมี 2 ชุดในวิชาเดียวกัน');
+    await p.locator('.course-delete').click();
+    const dlg = await p.locator('dialog').innerText();
+    check(/ลบทุกชุดข้อสอบของวิชานี้/.test(dlg) && /สอบย่อย 2/.test(dlg) && /ผลตรวจ 1 คน/.test(dlg), 'ลบทั้งวิชา: กล่องยืนยันบอกชื่อทุกชุดและจำนวนผลตรวจ');
+    await p.locator('dialog').getByRole('button', { name: 'ลบทั้ง 2 ชุด', exact: true }).click();
+    await p.getByText('ได้พื้นที่คืนประมาณ').waitFor();
+    await p.locator('.empty').waitFor();
+    const leftover = await p.evaluate(async () => {
+      const exams = Object.keys(JSON.parse(localStorage.getItem('cc.db.v1.exams') || '{}')).length;
+      const results = Object.keys(JSON.parse(localStorage.getItem('cc.db.v1.results') || '{}')).length;
+      const files = (await (await caches.open('cc-files-v1')).keys()).map((r) => decodeURIComponent(r.url)).filter((u) => /__files\/(res|key):/.test(u)).length;
+      return { exams, results, files };
+    });
+    check(leftover.exams === 0 && leftover.results === 0 && leftover.files === 0,
+      `ลบข้อมูลและรูปในที่เก็บสำรองหมด (${JSON.stringify(leftover)})`);
+    check(errs.length === 0, `ไม่มีข้อผิดพลาด${errs.length ? ': ' + errs.join(' | ') : ''}`);
+    await ctx.close();
+  }
+
   await page.goto(base + `#/exam/${examId}/scan`);
   await page.locator('#student-no').waitFor();
 
@@ -486,6 +531,44 @@ try {
   check(true, 'เปิดแอปและเห็นข้อมูลได้ขณะออฟไลน์');
   await context.setOffline(false);
   await shot('10-home');
+
+  console.log('ลบชุดข้อสอบที่ไม่ใช้แล้ว (ปุ่มถังขยะในคลังเฉลย)');
+  await page.goto(base + '#/library');
+  await page.locator('#library-storage:not([hidden])').waitFor();
+  const before = await page.locator('.library-list .exam-item').count();
+  const row100 = page.locator(`.exam-item[data-exam-id="${exam100}"]`);
+  const sizeText = (await row100.locator('.exam-size').textContent()).trim();
+  check(/(KB|MB)$/.test(sizeText), `แต่ละชุดบอกขนาดพื้นที่ที่ใช้ (${sizeText})`);
+  await row100.locator('.btn-trash').click();
+  await page.locator('dialog .dialog-details').waitFor();
+  const dlgText = await page.locator('dialog').innerText();
+  check(/ผลตรวจ 1 คน/.test(dlgText) && /ได้พื้นที่คืนประมาณ/.test(dlgText), 'กล่องยืนยันบอกสิ่งที่จะถูกลบและพื้นที่ที่ได้คืน');
+  check(await page.evaluate(() => document.activeElement && document.activeElement.textContent.trim() === 'ยกเลิก'), 'กล่องยืนยันโฟกัสที่ปุ่มยกเลิก กด Enter โดยไม่ตั้งใจจะไม่ลบ');
+  await shot('17-delete-confirm');
+  await page.locator('dialog').getByRole('button', { name: 'ยกเลิก', exact: true }).click();
+  check(await page.locator('.library-list .exam-item').count() === before, 'กดยกเลิกแล้วไม่มีอะไรถูกลบ');
+  await row100.locator('.btn-trash').click();
+  await page.locator('dialog').getByRole('button', { name: 'ลบชุดข้อสอบ', exact: true }).click();
+  await page.getByText('ได้พื้นที่คืนประมาณ').waitFor();
+  await page.locator(`.exam-item[data-exam-id="${exam100}"]`).waitFor({ state: 'detached' });
+  const left = await page.evaluate((id) => new Promise((resolve) => {
+    const r = indexedDB.open('checkchoice');
+    r.onsuccess = () => {
+      const d = r.result;
+      const tx = d.transaction(['exams', 'results', 'blobs'], 'readonly');
+      const res = {};
+      tx.objectStore('exams').get(id).onsuccess = (e) => { res.exam = !!e.target.result; };
+      tx.objectStore('results').getAll().onsuccess = (e) => { res.results = e.target.result.filter((x) => x.examId === id).length; };
+      tx.objectStore('blobs').getAllKeys().onsuccess = (e) => { res.images = e.target.result.filter((k) => String(k).includes(id)).length; };
+      tx.oncomplete = () => { d.close(); resolve(res); };
+    };
+  }), exam100);
+  check(!left.exam && left.results === 0 && left.images === 0, `ลบชุดข้อสอบ ผลตรวจ และรูปทั้งหมดของชุดนั้น (${JSON.stringify(left)})`);
+  check(await page.locator('.library-list .exam-item').count() === before - 1, 'รายการในคลังเฉลยลดลง 1 ชุด');
+  await shot('18-library-after-delete');
+  await page.goto(base + '#/');
+  await page.locator('.exam-item .btn-trash').first().waitFor();
+  check(await page.locator('.exam-item .btn-trash').count() === await page.locator('.exam-item').count(), 'รายการใช้ล่าสุดบนหน้าแรกมีปุ่มถังขยะทุกแถว');
 
   check(errors.length === 0, `ไม่มีข้อผิดพลาดในคอนโซล${errors.length ? ': ' + errors.join(' | ') : ''}`);
 } catch (err) {

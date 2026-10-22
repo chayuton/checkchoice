@@ -136,10 +136,25 @@ function indexedDBBackend() {
             if (r.imageId) blobs.delete(r.imageId);
           }
         };
-        blobs.delete(`key:${examId}:original`);
-        blobs.delete(`key:${examId}:table`);
+        // ลบรูปทุกรูปของชุดนี้ตามคำนำหน้า (รวมรูปที่ไม่มีผลตรวจอ้างถึงแล้ว)
+        for (const prefix of [`res:${examId}:`, `key:${examId}:`]) blobs.delete(IDBKeyRange.bound(prefix, `${prefix}\uffff`));
         tx.objectStore('exams').delete(examId);
       });
+    },
+    /** ขนาดรูปทั้งหมด [{ id, size }] (ไม่อ่านเนื้อไฟล์) */
+    blobSizes() {
+      return run(['blobs'], 'readonly', (tx) => new Promise((resolve, reject) => {
+        const out = [];
+        const req = tx.objectStore('blobs').openCursor();
+        req.onsuccess = () => {
+          const c = req.result;
+          if (!c) { resolve(out); return; }
+          const b = c.value && c.value.blob;
+          out.push({ id: c.value.id, size: b && b.size ? b.size : 0 });
+          c.continue();
+        };
+        req.onerror = () => reject(req.error);
+      }));
     },
     deleteResult(result) {
       return run(['results', 'blobs'], 'readwrite', (tx) => {
@@ -222,7 +237,7 @@ function fallbackBackend(useCache) {
       if (!cacheP) { memory.set(rec.id, { id: rec.id, blob, type: rec.type || blob.type }); return; }
       try {
         await (await cacheP).put(fileUrl(rec.id), new Response(blob, {
-          headers: { 'Content-Type': rec.type || blob.type || 'application/octet-stream' },
+          headers: { 'Content-Type': rec.type || blob.type || 'application/octet-stream', 'X-Size': String(blob.size) },
         }));
       } catch (e) {
         throw new Error(FULL_MESSAGE);
@@ -231,6 +246,25 @@ function fallbackBackend(useCache) {
     async delete(id) {
       if (!cacheP) { memory.delete(id); return; }
       await (await cacheP).delete(fileUrl(id));
+    },
+    async sizes() {
+      if (!cacheP) return [...memory.values()].map((r) => ({ id: r.id, size: r.blob ? r.blob.size : 0 }));
+      const c = await cacheP;
+      const out = [];
+      for (const req of await c.keys()) {
+        const m = req.url.match(/__files\/([^?#]+)$/);
+        if (!m) continue;
+        const res = await c.match(req);
+        if (!res) continue;
+        const size = Number(res.headers.get('X-Size')) || (await res.blob()).size;
+        out.push({ id: decodeURIComponent(m[1]), size });
+      }
+      return out;
+    },
+    async ids() {
+      if (!cacheP) return [...memory.keys()];
+      const c = await cacheP;
+      return (await c.keys()).map((req) => req.url.match(/__files\/([^?#]+)$/)).filter(Boolean).map((m) => decodeURIComponent(m[1]));
     },
     async all() {
       if (!cacheP) return [...memory.values()];
@@ -292,8 +326,13 @@ function fallbackBackend(useCache) {
       const exams = read('exams');
       delete exams[examId];
       write('exams', exams);
-      images.push(`key:${examId}:original`, `key:${examId}:table`);
-      for (const id of images) await files.delete(id).catch(() => {});
+      // รูปทุกรูปของชุดนี้ตามคำนำหน้า (รวมรูปที่ไม่มีผลตรวจอ้างถึงแล้ว)
+      const prefixes = [`res:${examId}:`, `key:${examId}:`];
+      for (const id of await files.ids().catch(() => [])) if (prefixes.some((p) => id.startsWith(p))) images.push(id);
+      for (const id of new Set(images)) await files.delete(id).catch(() => {});
+    },
+    async blobSizes() {
+      return files.sizes();
     },
     async deleteResult(result) {
       await api.delete('results', result.id);
@@ -395,6 +434,8 @@ export const db = {
   deleteExamCascade: (examId) => use((b) => b.deleteExamCascade(examId)),
   /** ลบผลตรวจหนึ่งรายการพร้อมรูป */
   deleteResult: (result) => use((b) => b.deleteResult(result)),
+  /** ขนาดรูปทั้งหมด [{ id, size }] */
+  blobSizes: () => use((b) => b.blobSizes()),
   /** อ่านทุกอย่างสำหรับไฟล์สำรอง */
   dumpAll: () => use((b) => b.dumpAll()),
 };

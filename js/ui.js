@@ -103,13 +103,19 @@ function openDialog(build) {
   });
 }
 
-export function confirmDialog(message, { title = '', okText = 'ตกลง', cancelText = 'ยกเลิก', danger = false } = {}) {
+/**
+ * กล่องยืนยัน details: รายการบรรทัดย่อยใต้ข้อความ, note: ข้อความเพิ่มเติมท้ายกล่อง
+ * danger: ปุ่มยืนยันสีแดง และโฟกัสที่ปุ่มยกเลิก (กด Enter โดยไม่ตั้งใจจะไม่ลบ)
+ */
+export function confirmDialog(message, { title = '', okText = 'ตกลง', cancelText = 'ยกเลิก', danger = false, details = null, note = '' } = {}) {
   return openDialog((close) => h('form', { method: 'dialog', onsubmit: (e) => { e.preventDefault(); close(true); } },
     title ? h('h2', { class: 'dialog-title' }, title) : null,
     h('p', { class: 'dialog-text' }, message),
+    details && details.length ? h('ul', { class: 'dialog-details' }, details.map((d) => h('li', null, d))) : null,
+    note ? h('p', { class: 'dialog-note' }, note) : null,
     h('div', { class: 'dialog-actions' },
-      h('button', { type: 'button', class: 'btn btn-quiet', onclick: () => close(false) }, cancelText),
-      h('button', { type: 'submit', class: danger ? 'btn btn-danger' : 'btn btn-primary', autofocus: true }, okText)),
+      h('button', { type: 'button', class: 'btn btn-quiet', autofocus: danger, onclick: () => close(false) }, cancelText),
+      h('button', { type: 'submit', class: danger ? 'btn btn-danger' : 'btn btn-primary', autofocus: !danger }, okText)),
   )).then((v) => v === true);
 }
 
@@ -140,4 +146,11 @@ export function formatDate(iso) {
 
 export function plural(n, unit) {
   return `${n.toLocaleString('th-TH')} ${unit}`;
+}
+
+/** ขนาดไฟล์อ่านง่าย เช่น 820 KB, 5.2 MB */
+export function formatBytes(n) {
+  if (!(n > 0)) return '0 KB';
+  if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024)).toLocaleString('th-TH')} KB`;
+  return `${(n / 1048576).toLocaleString('th-TH', { maximumFractionDigits: 1 })} MB`;
 }

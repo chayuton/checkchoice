@@ -2,7 +2,7 @@
 import { h, clear, icon, toast, confirmDialog } from '../ui.js';
 import { appBar, go, setLeaveGuard } from '../nav.js';
 import {
-  blankExam, getExam, saveExam, deleteExam, listExams, listResults, putBlob, getBlob, examTitle,
+  blankExam, getExam, saveExam, listExams, listResults, putBlob, getBlob, examTitle,
   listTemplates, templateSummary,
 } from '../store.js';
 import { answerGrid } from '../grid.js';
@@ -11,6 +11,7 @@ import { pickImage, fileToCanvas, canvasImageData, canvasToBlob } from '../captu
 import { initOMR, readSheet, workLongSide } from '../omr/client.js';
 import { requestPersistence } from '../pwa.js';
 import { openTransferDialog } from '../transfer-ui.js';
+import { deleteExamsWithConfirm } from '../delete-ui.js';
 import { errorMessage } from './scan.js';
 
 const OMR = self.OMRCore;
@@ -294,14 +295,11 @@ export async function examView(root, id, presetTemplateId) {
     main.append(h('section', { class: 'form-section danger-zone' },
       h('h2', { class: 'section-title' }, 'ลบชุดข้อสอบ'),
       h('p', { class: 'section-help' }, `ลบชุดข้อสอบนี้พร้อมผลตรวจ ${resultsCount} คนและรูปทั้งหมดออกจากเครื่อง`),
-      h('button', { type: 'button', class: 'btn btn-danger', onclick: async () => {
-        const ok = await confirmDialog(`ลบ "${t.exam}" และผลตรวจทั้งหมด ลบแล้วกู้คืนไม่ได้ ยกเว้นมีไฟล์สำรอง`, { okText: 'ลบชุดข้อสอบ', danger: true });
-        if (!ok) return;
-        await deleteExam(exam.id);
+      h('button', { type: 'button', class: 'btn btn-danger', id: 'btn-delete-exam', onclick: async () => {
+        if (!(await deleteExamsWithConfirm([exam]))) return;
         dirty = false;
         setLeaveGuard(null);
-        toast('ลบชุดข้อสอบแล้ว');
-        go('#/');
+        go('#/library');
       } }, icon('trash'), 'ลบชุดข้อสอบ')));
   }
 }

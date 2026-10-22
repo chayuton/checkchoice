@@ -1,10 +1,11 @@
 // หน้าแรก: เลือก "เปิดจากคลังเฉลย" หรือ "สร้างเฉลยใหม่" + ชุดข้อสอบที่ใช้ล่าสุด + เครื่องมือ
 import { h, icon, penX, plural, formatDate } from '../ui.js';
-import { appBar } from '../nav.js';
+import { appBar, go } from '../nav.js';
 import { listExams, listResults, listTemplates, examTitle } from '../store.js';
 import { install, isStandalone, platform } from '../pwa.js';
 import { transferButton } from '../transfer-ui.js';
 import { limitedNotice } from '../env.js';
+import { deleteExamsWithConfirm, trashButton } from '../delete-ui.js';
 
 function installHint() {
   if (isStandalone()) return null;
@@ -104,7 +105,10 @@ export async function homeView(root) {
           h('div', { class: 'exam-actions' },
             h('a', { class: 'btn btn-primary btn-small', href: `#/exam/${e.id}/scan` }, icon('camera'), 'ตรวจกระดาษ'),
             h('a', { class: 'btn btn-quiet btn-small', href: `#/exam/${e.id}/results` }, icon('table'), 'ผลคะแนน'),
-            transferButton(e, 'btn btn-quiet btn-small')));
+            transferButton(e, 'btn btn-quiet btn-small'),
+            trashButton(`ลบชุดข้อสอบ ${t.exam}`, async () => {
+              if (await deleteExamsWithConfirm([e])) go('#/');
+            })));
       }))));
   }
 

@@ -162,6 +162,17 @@ button, input, select { font: inherit; color: inherit; }
 .exam-meta { color: var(--graphite-2); font-size: 15px; }
 .exam-date { color: var(--muted); font-size: 13px; }
 .exam-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.exam-size { white-space: nowrap; }
+/* ปุ่มถังขยะ: ชิดขวาสุดของแถว สีแดงเฉพาะไอคอน ไม่เด่นกว่าปุ่มหลัก */
+.btn-trash { color: var(--red); padding: 6px 10px; margin-left: auto; }
+.btn-trash:not(:disabled):hover { border-color: var(--red); background: var(--red-soft); }
+.course-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding-bottom: 6px; border-bottom: 2px solid var(--graphite); }
+.course-head .course-title { border-bottom: 0; padding-bottom: 0; }
+.course-delete { display: inline-flex; align-items: center; gap: 4px; color: var(--red); text-decoration: none; padding: 4px 2px; }
+.course-delete .icon { width: 17px; height: 17px; }
+.course-delete:hover { text-decoration: underline; }
+.storage-summary { margin-top: -6px; }
 @media (min-width: 640px) {
   .exam-item { grid-template-columns: 1fr auto; align-items: center; }
 }
@@ -342,6 +353,8 @@ button, input, select { font: inherit; color: inherit; }
 .dialog::backdrop { background: rgba(10, 12, 14, .5); }
 .dialog-title { font-size: 19px; margin-bottom: 8px; }
 .dialog-text { margin-bottom: 18px; }
+.dialog-details { margin: -10px 0 6px; padding-left: 1.3em; display: grid; gap: 4px; font-size: 15px; color: var(--graphite-2); }
+.dialog-note { font-size: 14px; color: var(--graphite-2); border-top: 1px solid var(--rule); padding-top: 10px; margin-top: 10px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
 
 .toast {
