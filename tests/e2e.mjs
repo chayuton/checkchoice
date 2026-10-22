@@ -2,7 +2,7 @@
 // สร้างชุดข้อสอบจากรูปใบเฉลย ตรวจกระดาษ 3 แผ่นด้วยการเลือกรูป, 1 แผ่นด้วยกล้องสด (ถ้ากำหนด FAKE_VIDEO)
 // ส่งออก Excel/ไฟล์สำรอง และทดสอบการเปิดแบบออฟไลน์
 import http from 'node:http';
-import { createReadStream, existsSync, mkdirSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, mkdirSync, statSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -88,12 +88,15 @@ try {
 
   console.log('หน้าแรก');
   await page.goto(base);
-  await page.getByText('ยังไม่มีชุดข้อสอบ').waitFor();
-  check(true, 'แสดงหน้าว่างพร้อมปุ่มสร้างชุดข้อสอบ');
+  await page.locator('#choice-new').waitFor();
+  const libMeta = await page.locator('#choice-library').innerText();
+  check(/เปิดจากคลังเฉลย/.test(libMeta) && /ยังไม่มีเฉลย/.test(libMeta), 'หน้าแรกมีทางเลือก "เปิดจากคลังเฉลย" และ "สร้างเฉลยใหม่"');
   await shot('01-home-empty');
 
   console.log('สร้างชุดข้อสอบจากรูปใบเฉลย');
-  await page.getByRole('link', { name: 'สร้างชุดข้อสอบ' }).first().click();
+  await page.locator('#choice-new').click();
+  await page.locator('#f-template').waitFor();
+  check(await page.locator('#f-template option').count() >= 3, 'เลือกแบบฟอร์มได้อย่างน้อย 3 แบบ (60/100/120 ข้อ)');
   await page.locator('#f-code').fill('04-012-301');
   await page.locator('#f-name').fill('เทคโนโลยีสารสนเทศ');
   await page.locator('#f-exam').fill('สอบกลางภาค 1/2569');
@@ -230,6 +233,131 @@ try {
   await page.locator('.score-table').waitFor();
   const rows40 = await page.$$eval('.score-table tbody tr', (trs) => trs.map((tr) => tr.cells[1].textContent.trim()));
   check(rows40[0] === `${scoreFor(2, 40)}/40` && rows40[1] === `${scoreFor(5, 40)}/40`, `คะแนนแบบ 40 ข้อ ${JSON.stringify(rows40)}`);
+
+  console.log('คลังเฉลย');
+  await page.goto(base + '#/');
+  await page.locator('#choice-library').click();
+  await page.locator('#library-search').waitFor();
+  await page.locator('#library-search').fill('กลางภาค');
+  check(await page.locator('.library-list .exam-item').count() === 1, 'ค้นหาในคลังเฉลยเจอชุดข้อสอบ');
+  await page.locator('#library-search').fill('ไม่มีวิชานี้');
+  check(await page.locator('.library-list .notice').count() === 1, 'ค้นหาไม่เจอแสดงข้อความแจ้ง');
+  await page.locator('#library-search').fill('');
+  await shot('11-library');
+
+  const synth = JSON.parse(readFileSync(fx('synth-truth.json'), 'utf8'));
+  const readTplFields = () => page.$$eval(['#t-blocks', '#t-rowsPerBlock', '#t-choices', '#t-headerRows'].join(','),
+    (els) => els.map((e) => e.value).join(','));
+  const gridLetters = () => page.$$eval('.answer-grid .grid-row:not(.grid-head)', (rows) => rows.map((r) => {
+    const i = [...r.querySelectorAll('.cell-choice')].findIndex((c) => c.classList.contains('sel'));
+    return i < 0 ? '-' : 'ABCDEFGH'[i];
+  }).join(''));
+
+  console.log('เพิ่มแบบฟอร์ม 100 ข้อจากรูปกระดาษเปล่า');
+  await page.goto(base + '#/templates');
+  await page.locator('#btn-new-template').click();
+  await page.locator('#t-blocks').waitFor();
+  await chooseFile('เลือกรูปจากเครื่อง', fx('synth-grid-100x5-blank.jpg'));
+  await page.locator('.key-status.ok').waitFor({ timeout: 90000 });
+  const vals = await readTplFields();
+  check(vals === '5,20,5,2', `นับโครงตารางจากรูปได้ ชุด/ข้อ/ตัวเลือก/หัวตาราง = ${vals}`);
+  await page.locator('#t-name').fill('กระดาษคำตอบคณะ 100 ข้อ');
+  await shot('12-template-wizard');
+  await page.locator('#btn-save-template').click();
+  await page.locator('#btn-use-template').waitFor();
+  const tplId = page.url().split('#/templates/')[1];
+  check(/^tpl_/.test(tplId), 'บันทึกแบบฟอร์มใหม่แล้ว');
+  await shot('13-template-detail');
+
+  console.log('สร้างเฉลยและตรวจกระดาษ 100 ข้อด้วยแบบฟอร์มใหม่');
+  await page.locator('#btn-use-template').click();
+  await page.locator('#f-template').waitFor();
+  check(await page.locator('#f-template').inputValue() === tplId, 'หน้าสร้างเฉลยเลือกแบบฟอร์มใหม่ไว้ให้แล้ว');
+  await page.locator('#f-code').fill('04-012-302');
+  await page.locator('#f-name').fill('การเขียนโปรแกรม');
+  await page.locator('#f-exam').fill('สอบปลายภาค 1/2569');
+  await chooseFile('เลือกรูปจากเครื่อง', fx('synth-grid-100x5-key.jpg'));
+  await page.locator('.key-status.ok').waitFor({ timeout: 90000 });
+  const key100 = await gridLetters();
+  const T100 = synth['grid-100x5'];
+  check(key100 === T100.key, `อ่านเฉลย 100 ข้อตรงทุกข้อ (${[...key100].filter((c, i) => c === T100.key[i]).length}/100)`);
+  await page.getByRole('button', { name: 'บันทึกแล้วเริ่มตรวจ' }).click();
+  await page.locator('#student-no').waitFor();
+  const exam100 = page.url().split('#/exam/')[1].split('/')[0];
+  await page.locator('#student-no').selectOption('1');
+  await chooseFile('เลือกรูปจากเครื่อง', fx('synth-grid-100x5-student.jpg'));
+  await page.locator('.score-big').waitFor({ timeout: 90000 });
+  const bulk = page.locator('.chip-action');
+  if (await bulk.count()) await bulk.click();
+  for (let guard = 0; guard < 60 && await page.locator('.grid-row.is-pending .confirm').count(); guard++) {
+    await page.locator('.grid-row.is-pending .confirm').first().click();
+  }
+  const s100 = Number(await page.locator('.score-big').textContent());
+  const want100 = [...T100.student].filter((c, i) => c === T100.key[i]).length;
+  check(s100 === want100 && (await page.locator('.score-of').textContent()).includes('100'),
+    `กระดาษ 100 ข้อได้ ${s100}/100 คะแนน (คาดไว้ ${want100})`);
+  await shot('14-review-100');
+  await page.locator('#btn-save').click();
+  await page.getByText('บันทึกเลขที่ 1 แล้ว').waitFor();
+
+  console.log('ส่งเฉลยที่ใช้แบบฟอร์มใหม่ไปอีกเครื่อง');
+  await page.goto(base + `#/exam/${exam100}`);
+  await page.locator('#btn-transfer').click();
+  await page.locator('#transfer-dialog').waitFor();
+  const link100 = await page.locator('#transfer-link').inputValue();
+  await page.getByRole('button', { name: 'เสร็จแล้ว' }).click();
+  {
+    const other = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'th-TH' });
+    const p2 = await other.newPage();
+    await p2.goto(link100);
+    await p2.locator('#btn-import').click();
+    await p2.locator('#student-no').waitFor();
+    await p2.goto(base + '#/templates');
+    await p2.locator('.tpl-item').first().waitFor();
+    check(await p2.getByText('กระดาษคำตอบคณะ 100 ข้อ').count() === 1, 'เครื่องปลายทางได้แบบฟอร์มที่เพิ่มเองไปด้วย');
+    await other.close();
+  }
+
+  console.log('พิมพ์กระดาษคำตอบเปล่า 120 ข้อ แล้วอ่านกลับด้วยตัวช่วยเพิ่มแบบฟอร์ม');
+  await page.goto(base + '#/templates/grid-120x4/print');
+  await page.locator('.answer-sheet').waitFor();
+  const dims = await page.$$eval('.answer-sheet tr', (trs) => [trs.length, trs[0].cells.length]);
+  check(dims[0] === 32 && dims[1] === 20, `ตารางสำหรับพิมพ์ ${dims[1]} คอลัมน์ × ${dims[0]} แถว`);
+  await page.waitForTimeout(300);
+  const fits = await page.$eval('.sheet-stage', (s) => s.scrollWidth <= s.clientWidth + 1);
+  check(fits, 'ตัวอย่างกระดาษบนมือถือย่อให้พอดีจอ ไม่ต้องเลื่อนซ้ายขวา');
+  await shot('16-print-preview');
+  // จับภาพที่ความละเอียดใกล้เคียงกระดาษที่พิมพ์จริง
+  await page.setViewportSize({ width: 1100, height: 1700 });
+  await page.waitForTimeout(300);
+  await page.locator('.sheet-print').screenshot({ path: path.join(out, 'print-120.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ media: 'print' });
+  const sheetPdf = path.join(out, 'sheet-120.pdf');
+  await page.pdf({ path: sheetPdf, preferCSSPageSize: true, printBackground: true });
+  await page.emulateMedia({ media: 'screen' });
+  const pdfPages = (readFileSync(sheetPdf, 'latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
+  check(pdfPages === 1, `พิมพ์ได้ใน A4 หน้าเดียว (${pdfPages} หน้า)`);
+  await page.goto(base + '#/templates/new');
+  await page.locator('#t-blocks').waitFor();
+  await chooseFile('เลือกรูปจากเครื่อง', path.join(out, 'print-120.png'));
+  await page.locator('.key-status.ok, .key-status.error').first().waitFor({ timeout: 90000 });
+  const vals2 = await readTplFields();
+  check(vals2 === '4,30,4,2', `อ่านกระดาษที่แอปพิมพ์กลับมาได้โครงเดิม (${vals2})`);
+  await page.evaluate(() => { location.hash = '#/'; });
+  await page.getByRole('button', { name: 'ออกโดยไม่บันทึก' }).click();
+  await page.locator('#choice-new').waitFor();
+  check(true, 'ออกจากหน้าที่ยังไม่บันทึก มีกล่องยืนยันก่อน');
+
+  console.log('ข้อมูลสำหรับ Train');
+  await page.goto(base + '#/training');
+  await page.locator('#training-stats').waitFor();
+  await shot('15-training');
+  const [ds] = await Promise.all([page.waitForEvent('download'), page.locator('#btn-export-dataset').click()]);
+  const dsPath = path.join(out, 'dataset.zip');
+  await ds.saveAs(dsPath);
+  const mk = spawnSync('python3', [path.join(root, 'tools/make_cells.py'), dsPath, path.join(out, 'cells')], { encoding: 'utf8' });
+  check(mk.status === 0 && /จาก 8 ภาพ/.test(mk.stdout), `ส่งออกชุดข้อมูลและตัดช่องได้: ${(mk.stdout || mk.stderr).trim()}`);
 
   console.log('สำรองข้อมูล');
   await page.goto(base + '#/settings');

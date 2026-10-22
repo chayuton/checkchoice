@@ -9,6 +9,7 @@ const OMR = self.OMRCore;
  */
 export function answerGrid({ template, count, mode, key, items, onChange }) {
   const wrap = h('div', { class: `answer-grid mode-${mode}` });
+  wrap.style.setProperty('--choices', String(template.choices));
   const labels = template.choiceLabels;
   const thai = template.thaiLabels || [];
   const per = template.rowsPerBlock;

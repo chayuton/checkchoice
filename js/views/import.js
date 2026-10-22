@@ -1,7 +1,7 @@
 // รับชุดข้อสอบจากลิงก์/QR code ที่ส่งมาจากอีกเครื่อง
 import { h, icon, toast } from '../ui.js';
 import { appBar, go } from '../nav.js';
-import { getExam, saveExam, examTitle, letterOf } from '../store.js';
+import { getExam, saveExam, examTitle, letterOf, getTemplate, saveTemplate } from '../store.js';
 import { decodeExam } from '../transfer.js';
 import { requestPersistence } from '../pwa.js';
 
@@ -14,7 +14,7 @@ export async function importView(root, payload) {
 
   let incoming;
   try {
-    incoming = decodeExam(payload, OMR.TEMPLATES);
+    incoming = decodeExam(payload, OMR.TEMPLATES, OMR);
   } catch (err) {
     main.append(h('p', { class: 'notice notice-error' }, err.message),
       h('a', { class: 'btn btn-quiet', href: '#/' }, 'ไปหน้าแรก'));
@@ -32,6 +32,7 @@ export async function importView(root, payload) {
   main.append(h('section', { class: 'form-section' },
     h('h2', { class: 'section-title' }, t.exam),
     h('p', { class: 'section-help' }, t.course || 'ไม่ระบุรายวิชา'),
+    incoming.template.custom ? h('p', { class: 'section-help' }, `แบบฟอร์ม: ${incoming.template.name} (จะเพิ่มลงในเครื่องนี้ด้วย)`) : null,
     h('dl', { class: 'import-facts' },
       h('div', null, h('dt', null, 'จำนวนข้อสอบ'), h('dd', null, `${incoming.questionCount} ข้อ`)),
       h('div', null, h('dt', null, 'มีเฉลย'), h('dd', null, `${have} ข้อ`)),
@@ -45,6 +46,14 @@ export async function importView(root, payload) {
   const btn = h('button', { type: 'button', class: 'btn btn-primary btn-large', id: 'btn-import', onclick: async () => {
     btn.disabled = true;
     try {
+      // แบบฟอร์มที่อาจารย์เพิ่มเองบนเครื่องต้นทาง: เพิ่มลงในเครื่องนี้ด้วย
+      if (incoming.template.custom) {
+        const local = incoming.template.id ? await getTemplate(incoming.template.id) : null;
+        if (!local) {
+          const saved = await saveTemplate(Object.assign({}, incoming.template, { createdAt: new Date().toISOString() }));
+          incoming.template = Object.assign({}, saved);
+        }
+      }
       const exam = existing
         ? Object.assign(existing, {
           courseCode: incoming.courseCode, courseName: incoming.courseName, examName: incoming.examName,

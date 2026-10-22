@@ -98,7 +98,7 @@ async function dataURLToBlob(url) {
   return res.blob();
 }
 
-function download(blob, filename) {
+export function download(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -110,10 +110,10 @@ function download(blob, filename) {
 }
 
 export async function backupAll() {
-  const { exams, results, blobs } = await db.dumpAll();
+  const { exams, results, blobs, templates } = await db.dumpAll();
   const files = [];
   for (const b of blobs) files.push({ id: b.id, type: b.type || (b.blob && b.blob.type), data: await blobToDataURL(b.blob) });
-  const payload = { app: 'checkchoice', format: 1, exportedAt: new Date().toISOString(), exams, results, files };
+  const payload = { app: 'checkchoice', format: 1, exportedAt: new Date().toISOString(), exams, results, templates, files };
   const stamp = new Date().toISOString().slice(0, 10);
   download(new Blob([JSON.stringify(payload)], { type: 'application/json' }), `checkchoice-backup-${stamp}.json`);
   return { exams: exams.length, results: results.length };
@@ -130,6 +130,7 @@ export async function readBackup(file) {
 export async function restoreBackup(data) {
   const blobs = [];
   for (const f of data.files || []) blobs.push({ id: f.id, type: f.type, blob: await dataURLToBlob(f.data) });
+  await db.putMany('templates', Array.isArray(data.templates) ? data.templates.filter((t) => t && typeof t.id === 'string') : []);
   await db.putMany('exams', data.exams);
   await db.putMany('results', data.results || []);
   await db.putMany('blobs', blobs);

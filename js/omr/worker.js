@@ -66,6 +66,12 @@ self.onmessage = async (e) => {
       res.ms = Date.now() - t0;
       const transfer = res.display ? [res.display.data.buffer] : [];
       self.postMessage({ type: 'reply', id: m.id, result: res }, transfer);
+    } else if (m.type === 'infer') {
+      const t0 = Date.now();
+      const res = OMRCore.inferTemplate(cv, mat);
+      res.ms = Date.now() - t0;
+      const transfer = res.display ? [res.display.data.buffer] : [];
+      self.postMessage({ type: 'reply', id: m.id, result: res }, transfer);
     } else if (m.type === 'detect') {
       const quad = OMRCore.detectTable(cv, mat, m.template);
       self.postMessage({ type: 'reply', id: m.id, result: { ok: true, quad } });

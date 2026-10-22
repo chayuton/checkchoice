@@ -127,6 +127,57 @@ for (const name of ['key.jpg', 'student-05.jpg', 'blank.jpg']) {
     `ภาพปกติไม่ถูกหมุน (หัวตาราง ${r.orientation.top.toFixed(2)} / ท้ายตาราง ${r.orientation.bottom.toFixed(2)})`);
 }
 
+console.log('ตรวจหาโครงตารางจากรูปกระดาษเปล่า (ใช้ตอนเพิ่มแบบฟอร์มใหม่)');
+const shapeOf = (t) => `${t.blocks}×${t.rowsPerBlock} ตัวเลือก ${t.choices} หัวตาราง ${t.headerRows}${t.numberColumn ? ' มีคอลัมน์เลขข้อ' : ''}`;
+{
+  const mat = loadImage(cv, fx('blank.jpg'));
+  const r = OMR.inferTemplate(cv, mat);
+  mat.delete();
+  check(r.ok && shapeOf(r.template) === shapeOf(tpl), `กระดาษจริง 60 ข้อ: ${r.ok ? shapeOf(r.template) : r.error}`);
+}
+const synth = JSON.parse(readFileSync(fx('synth-truth.json'), 'utf8'));
+for (const [id, T] of Object.entries(synth)) {
+  const t = OMR.TEMPLATES.find((x) => x.id === id);
+  const mat = loadImage(cv, fx(`synth-${id}-blank.jpg`));
+  const r = OMR.inferTemplate(cv, mat);
+  mat.delete();
+  check(r.ok && shapeOf(r.template) === shapeOf(t), `กระดาษจำลอง ${id}: ${r.ok ? shapeOf(r.template) : r.error}`);
+}
+
+console.log('อ่านกระดาษจำลองที่มีข้อมากกว่า 60 ข้อ');
+for (const [id, T] of Object.entries(synth)) {
+  const t = OMR.TEMPLATES.find((x) => x.id === id);
+  for (const kind of ['key', 'student']) {
+    const mat = loadImage(cv, fx(`synth-${id}-${kind}.jpg`));
+    const r = OMR.readSheet(cv, mat, t);
+    mat.delete();
+    const got = r.ok ? r.decisions.map(letter).join('') : '';
+    const want = T[kind];
+    const n = [...got].filter((c, i) => c === want[i]).length;
+    check(r.ok && got === want, `${id} ${kind === 'key' ? 'ใบเฉลย' : 'นักศึกษา'}: ${r.ok ? `${n}/${want.length}` : 'อ่านไม่ได้'}`);
+    if (kind === 'student' && r.ok) {
+      const flags = {};
+      r.decisions.forEach((d, i) => { if (d.flag) flags[i + 1] = d.flag; });
+      check(JSON.stringify(flags) === JSON.stringify(T.flags), `${id} ข้อที่ติดธงตรงกับที่จำลองไว้ (${Object.keys(flags).length} ข้อ)`);
+    }
+  }
+}
+
+console.log('ลำดับเลขข้อและการตรวจแบบฟอร์ม');
+{
+  const across = OMR.normalizeTemplate({ blocks: 4, rowsPerBlock: 25, choices: 4, headerRows: 1, order: 'across' });
+  const pos = [1, 2, 5, 100].map((q) => OMR.cellOf(across, q, 0));
+  check(JSON.stringify(pos) === JSON.stringify([{ row: 1, col: 1 }, { row: 1, col: 6 }, { row: 2, col: 1 }, { row: 25, col: 16 }]),
+    'เลขข้อเรียงตามแถว (1 2 3 4 / 5 6 7 8 …) จับคู่ช่องถูกต้อง');
+  const down = OMR.normalizeTemplate({ blocks: 4, rowsPerBlock: 25, choices: 4, headerRows: 1 });
+  check(OMR.cellOf(down, 26, 0).col === 6 && OMR.cellOf(down, 26, 0).row === 1, 'เลขข้อเรียงลงตามคอลัมน์ (ข้อ 26 อยู่ต้นชุดที่ 2)');
+  check(OMR.validateTemplate(down).length === 0, 'แบบฟอร์ม 100 ข้อผ่านการตรวจ');
+  check(OMR.validateTemplate(OMR.normalizeTemplate({ blocks: 10, rowsPerBlock: 60, choices: 5, headerRows: 1 })).length > 0,
+    'แบบฟอร์มเกิน 300 ข้อถูกปฏิเสธ');
+  const n = OMR.normalizeTemplate({ blocks: '3', rowsPerBlock: 99, choices: 1, headerRows: -2 });
+  check(n.blocks === 3 && n.rowsPerBlock === 60 && n.choices === 2 && n.headerRows === 0, 'ค่าที่กรอกเกินช่วงถูกปรับให้อยู่ในช่วงที่รองรับ');
+}
+
 if (extraDir) {
   const { readdirSync } = await import('node:fs');
   console.log('รูปทดสอบความทนทาน: ' + extraDir);

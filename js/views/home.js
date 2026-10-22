@@ -1,21 +1,9 @@
-// หน้าแรก: คลังเฉลย แยกตามรายวิชา
+// หน้าแรก: เลือก "เปิดจากคลังเฉลย" หรือ "สร้างเฉลยใหม่" + ชุดข้อสอบที่ใช้ล่าสุด + เครื่องมือ
 import { h, icon, penX, plural, formatDate } from '../ui.js';
 import { appBar } from '../nav.js';
-import { listExams, listResults, examTitle } from '../store.js';
+import { listExams, listResults, listTemplates, examTitle } from '../store.js';
 import { install, isStandalone, platform } from '../pwa.js';
 import { transferButton } from '../transfer-ui.js';
-
-function emptyState() {
-  // ภาพกระดาษคำตอบย่อส่วน เป็นตัวอย่างว่าแอปทำอะไร
-  const mini = h('div', { class: 'mini-sheet', 'aria-hidden': 'true' },
-    [0, 1, 2, 3].map((r) => h('div', { class: 'mini-row' },
-      h('span', { class: 'mini-no' }, String(r + 1)),
-      [0, 1, 2, 3, 4].map((c) => h('span', { class: 'mini-cell' }, [1, 2, 0, 3][r] === c ? penX(r * 5 + c) : null)))));
-  return h('section', { class: 'empty' }, mini,
-    h('h2', null, 'ยังไม่มีชุดข้อสอบ'),
-    h('p', null, 'สร้างชุดข้อสอบของรายวิชา ถ่ายรูปใบเฉลย แล้วเริ่มถ่ายกระดาษคำตอบของนักศึกษาเพื่อตรวจ'),
-    h('a', { class: 'btn btn-primary btn-large', href: '#/exam/new' }, icon('plus'), 'สร้างชุดข้อสอบ'));
-}
 
 function installHint() {
   if (isStandalone()) return null;
@@ -50,48 +38,65 @@ function installHint() {
   return box;
 }
 
+/** ภาพกระดาษคำตอบย่อส่วน ใช้เป็นสัญลักษณ์ของปุ่มสร้างเฉลย */
+function miniSheet(marks) {
+  return h('span', { class: 'mini-sheet mini-sheet-sm', 'aria-hidden': 'true' },
+    marks.map((m, r) => h('span', { class: 'mini-row' },
+      h('span', { class: 'mini-no' }, String(r + 1)),
+      [0, 1, 2, 3].map((c) => h('span', { class: 'mini-cell' }, m === c ? penX(r * 4 + c) : null)))));
+}
+
+/** ภาพตั้งกระดาษซ้อนกัน ใช้เป็นสัญลักษณ์ของคลังเฉลย */
+function stackIcon(n) {
+  return h('span', { class: 'stack', 'aria-hidden': 'true' },
+    h('span', { class: 'stack-sheet s3' }), h('span', { class: 'stack-sheet s2' }),
+    h('span', { class: 'stack-sheet s1' }, h('span', { class: 'stack-count' }, String(n))));
+}
+
 export async function homeView(root) {
-  const exams = await listExams();
+  const [exams, templates] = await Promise.all([listExams(), listTemplates()]);
   const counts = await Promise.all(exams.map((e) => listResults(e.id).then((r) => r.length)));
   const countOf = new Map(exams.map((e, i) => [e.id, counts[i]]));
+  const courses = new Set(exams.map((e) => `${e.courseCode}|${e.courseName}`));
+  const confirmedSheets = counts.reduce((a, b) => a + b, 0);
 
   root.append(appBar({
     actions: [h('a', { class: 'icon-btn', href: '#/settings', 'aria-label': 'ตั้งค่าและสำรองข้อมูล' }, icon('gear'))],
   }));
-  const main = h('main', { class: 'page' });
+  const main = h('main', { class: 'page page-home' });
   root.append(main);
   const hint = installHint();
   if (hint) main.append(hint);
 
-  if (!exams.length) {
-    main.append(emptyState());
-    return;
-  }
+  main.append(
+    h('h1', { class: 'home-title' }, 'จะตรวจข้อสอบชุดไหน'),
+    h('div', { class: 'start-choices' },
+      h('a', { class: 'choice', href: '#/library', id: 'choice-library' },
+        stackIcon(exams.length),
+        h('span', { class: 'choice-text' },
+          h('span', { class: 'choice-title' }, 'เปิดจากคลังเฉลย'),
+          h('span', { class: 'choice-meta' }, exams.length
+            ? `${plural(exams.length, 'ชุดข้อสอบ')} ใน ${plural(courses.size, 'รายวิชา')}`
+            : 'ยังไม่มีเฉลยในเครื่องนี้'))),
+      h('a', { class: 'choice choice-new', href: '#/exam/new', id: 'choice-new' },
+        miniSheet([1, 3, 0]),
+        h('span', { class: 'choice-text' },
+          h('span', { class: 'choice-title' }, 'สร้างเฉลยใหม่'),
+          h('span', { class: 'choice-meta' }, 'เลือกแบบฟอร์มกระดาษคำตอบ แล้วถ่ายรูปใบเฉลย')))));
 
-  // จัดกลุ่มตามรายวิชา เรียงตามที่แก้ไขล่าสุด
-  const groups = new Map();
-  exams.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
-  for (const e of exams) {
-    const k = `${(e.courseCode || '').trim()}|${(e.courseName || '').trim()}`;
-    if (!groups.has(k)) groups.set(k, []);
-    groups.get(k).push(e);
-  }
-
-  main.append(h('div', { class: 'page-head' },
-    h('h1', { class: 'page-title' }, 'คลังเฉลย'),
-    h('a', { class: 'btn btn-primary', href: '#/exam/new' }, icon('plus'), 'สร้างชุดข้อสอบ')));
-
-  for (const list of groups.values()) {
-    const t = examTitle(list[0]);
-    main.append(h('section', { class: 'course' },
-      h('h2', { class: 'course-title' }, t.course || 'ไม่ระบุรายวิชา'),
-      h('ul', { class: 'exam-list' }, list.map((e) => {
-        const n = countOf.get(e.id) || 0;
+  // ชุดข้อสอบที่ใช้ล่าสุด
+  if (exams.length) {
+    const recent = exams.slice().sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || '')).slice(0, 3);
+    main.append(h('section', { class: 'home-section' },
+      h('div', { class: 'section-head' },
+        h('h2', { class: 'home-h2' }, 'ใช้ล่าสุด'),
+        h('a', { class: 'link', href: '#/library' }, 'ดูทั้งหมด')),
+      h('ul', { class: 'exam-list exam-list-boxed' }, recent.map((e) => {
+        const t = examTitle(e);
         return h('li', { class: 'exam-item' },
           h('a', { class: 'exam-main', href: `#/exam/${e.id}` },
-            h('span', { class: 'exam-name' }, examTitle(e).exam),
-            h('span', { class: 'exam-meta' },
-              `${plural(e.questionCount, 'ข้อ')}, ตรวจแล้ว ${plural(n, 'คน')}`),
+            h('span', { class: 'exam-name' }, t.exam),
+            h('span', { class: 'exam-meta' }, `${t.course || 'ไม่ระบุรายวิชา'}, ${plural(e.questionCount, 'ข้อ')}, ตรวจแล้ว ${plural(countOf.get(e.id) || 0, 'คน')}`),
             h('span', { class: 'exam-date' }, `แก้ไขล่าสุด ${formatDate(e.updatedAt)}`)),
           h('div', { class: 'exam-actions' },
             h('a', { class: 'btn btn-primary btn-small', href: `#/exam/${e.id}/scan` }, icon('camera'), 'ตรวจกระดาษ'),
@@ -99,4 +104,25 @@ export async function homeView(root) {
             transferButton(e, 'btn btn-quiet btn-small')));
       }))));
   }
+
+  // เครื่องมือ
+  const custom = templates.filter((t) => t.custom).length;
+  main.append(h('section', { class: 'home-section' },
+    h('h2', { class: 'home-h2' }, 'เครื่องมือ'),
+    h('ul', { class: 'tool-list' },
+      h('li', null, h('a', { href: '#/templates', id: 'tool-templates' },
+        icon('table'), h('span', { class: 'tool-text' },
+          h('span', { class: 'tool-title' }, 'แบบฟอร์มกระดาษคำตอบ'),
+          h('span', { class: 'tool-meta' }, `แบบสำเร็จรูป ${templates.length - custom} แบบ${custom ? `, เพิ่มเอง ${custom} แบบ` : ''} เพิ่มแบบที่มีข้อมากขึ้นได้`)),
+        icon('next', 'icon chevron'))),
+      h('li', null, h('a', { href: '#/training', id: 'tool-training' },
+        icon('image'), h('span', { class: 'tool-text' },
+          h('span', { class: 'tool-title' }, 'ข้อมูลสำหรับ Train'),
+          h('span', { class: 'tool-meta' }, `กระดาษที่ตรวจและยืนยันแล้ว ${plural(confirmedSheets, 'แผ่น')} ส่งออกไว้ฝึกโมเดลภายหลังได้`)),
+        icon('next', 'icon chevron'))),
+      h('li', null, h('a', { href: '#/settings' },
+        icon('gear'), h('span', { class: 'tool-text' },
+          h('span', { class: 'tool-title' }, 'ตั้งค่าและสำรองข้อมูล'),
+          h('span', { class: 'tool-meta' }, 'ติดตั้งแอป ดาวน์โหลดไฟล์สำรอง และกู้คืน')),
+        icon('next', 'icon chevron'))))));
 }

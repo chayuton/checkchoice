@@ -45,6 +45,11 @@ export function readSheet(imageData, template, opts) {
   return call('process', imageData, template, opts, true);
 }
 
+/** หาโครงตารางจากรูปกระดาษเปล่า (ใช้ตอนเพิ่มแบบฟอร์มใหม่) */
+export function inferTemplate(imageData) {
+  return call('infer', imageData, null, null, true);
+}
+
 /** หากรอบตารางอย่างเร็ว สำหรับโหมดกล้องสด */
 export function detectTable(imageData, template) {
   return call('detect', imageData, template, null, true);

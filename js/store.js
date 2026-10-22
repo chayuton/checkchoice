@@ -9,18 +9,56 @@ export function newId(prefix) {
   return `${prefix}_${rnd.replace(/-/g, '').slice(0, 16)}`;
 }
 
-export function templateById(id) {
-  return OMR.TEMPLATES.find((t) => t.id === id) || OMR.TEMPLATES[0];
+// ---------------------------------------------------------------------------
+// แบบฟอร์มกระดาษคำตอบ: แบบสำเร็จรูปในแอป + แบบที่อาจารย์เพิ่มเอง (เก็บในเครื่อง)
+// ---------------------------------------------------------------------------
+const copy = (x) => JSON.parse(JSON.stringify(x));
+
+export async function listTemplates() {
+  const custom = await db.getAll('templates').catch(() => []);
+  custom.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+  return [...OMR.TEMPLATES.map(copy), ...custom];
 }
 
-export function blankExam() {
-  const t = OMR.TEMPLATES[0];
+export async function getTemplate(id) {
+  const builtin = OMR.TEMPLATES.find((t) => t.id === id);
+  return builtin ? copy(builtin) : db.get('templates', id);
+}
+
+export async function saveTemplate(t) {
+  const now = new Date().toISOString();
+  const rec = OMR.normalizeTemplate(t);
+  if (!rec.id) { rec.id = newId('tpl'); rec.createdAt = now; }
+  rec.custom = true;
+  delete rec.builtin;
+  rec.updatedAt = now;
+  await db.put('templates', rec);
+  return rec;
+}
+
+export async function deleteTemplate(id) {
+  await db.delete('templates', id);
+  await db.delete('blobs', `tpl:${id}:blank`).catch(() => {});
+}
+
+/** จำนวนชุดข้อสอบที่ใช้แบบฟอร์มนี้ */
+export async function templateUsage(id) {
+  return (await listExams()).filter((e) => e.template && e.template.id === id).length;
+}
+
+export function templateSummary(t) {
+  const n = OMR.questionCount(t);
+  return `${n} ข้อ: ${t.blocks} ชุด × ${t.rowsPerBlock} ข้อ, ตัวเลือก ${t.choiceLabels[0]}–${t.choiceLabels[t.choices - 1]}`;
+}
+
+export function blankExam(template) {
+  const t = template ? copy(template) : copy(OMR.TEMPLATES[0]);
   return {
     id: null,
     courseCode: '',
     courseName: '',
     examName: '',
-    template: JSON.parse(JSON.stringify(t)),
+    template: t,
     questionCount: OMR.questionCount(t),
     maxStudentNo: 100,
     key: new Array(OMR.questionCount(t)).fill(null),

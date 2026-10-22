@@ -9,18 +9,29 @@ import { resultView } from './views/result.js';
 import { printView } from './views/print.js';
 import { settingsView } from './views/settings.js';
 import { importView } from './views/import.js';
+import { libraryView } from './views/library.js';
+import { templatesView, templateDetailView, templateEditView, templatePrintView } from './views/templates.js';
+import { trainingView } from './views/training.js';
 import { install } from './pwa.js';
 import { environmentProblems, environmentHelp, PROBLEM } from './env.js';
 
 const routes = [
   [/^#\/?$/, (root) => homeView(root)],
+  [/^#\/library$/, (root) => libraryView(root)],
   [/^#\/exam\/new$/, (root) => examView(root, null)],
+  [/^#\/exam\/new\/([\w-]+)$/, (root, tpl) => examView(root, null, tpl)],
   [/^#\/exam\/([\w-]+)$/, (root, id) => examView(root, id)],
   [/^#\/exam\/([\w-]+)\/scan$/, (root, id) => scanView(root, id)],
   [/^#\/exam\/([\w-]+)\/results$/, (root, id) => resultsView(root, id)],
   [/^#\/exam\/([\w-]+)\/result\/(\d+)$/, (root, id, no) => resultView(root, id, Number(no))],
   [/^#\/exam\/([\w-]+)\/print$/, (root, id) => printView(root, id)],
   [/^#\/import\/([A-Za-z0-9_-]+)$/, (root, payload) => importView(root, payload)],
+  [/^#\/templates$/, (root) => templatesView(root)],
+  [/^#\/templates\/new$/, (root) => templateEditView(root, null)],
+  [/^#\/templates\/([\w-]+)\/edit$/, (root, id) => templateEditView(root, id)],
+  [/^#\/templates\/([\w-]+)\/print$/, (root, id) => templatePrintView(root, id)],
+  [/^#\/templates\/([\w-]+)$/, (root, id) => templateDetailView(root, id)],
+  [/^#\/training$/, (root) => trainingView(root)],
   [/^#\/settings$/, (root) => settingsView(root)],
 ];
 

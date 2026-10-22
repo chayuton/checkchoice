@@ -31,11 +31,18 @@ export function encodeExam(exam) {
     m: exam.maxStudentNo,
     k: key,
   };
+  // แบบฟอร์มที่อาจารย์เพิ่มเอง: แนบโครงตารางไปด้วย เครื่องปลายทางจะได้มีแบบฟอร์มนี้
+  const t = exam.template;
+  if (!t.builtin) {
+    data.T = [t.blocks, t.rowsPerBlock, t.choices, t.headerRows, t.numberColumn ? 1 : 0, t.order === 'across' ? 1 : 0,
+      Math.round((t.aspect || 0) * 1000) / 1000, t.name || ''];
+  }
   return toBase64Url(new TextEncoder().encode(JSON.stringify(data)));
 }
 
-/** ถอดลิงก์กลับเป็นชุดข้อสอบ ตรวจทุกค่าก่อนใช้ (ลิงก์มาจากภายนอก) */
-export function decodeExam(payload, templates) {
+/** ถอดลิงก์กลับเป็นชุดข้อสอบ ตรวจทุกค่าก่อนใช้ (ลิงก์มาจากภายนอก)
+ *  core: OMRCore (ใช้สร้างและตรวจแบบฟอร์มที่แนบมาในลิงก์) */
+export function decodeExam(payload, templates, core) {
   let data;
   try {
     data = JSON.parse(new TextDecoder().decode(fromBase64Url(payload)));
@@ -43,7 +50,19 @@ export function decodeExam(payload, templates) {
     throw new Error('ลิงก์นี้ไม่ถูกต้องหรือไม่ครบ ลองสแกน QR code หรือคัดลอกลิงก์ใหม่');
   }
   if (!data || typeof data !== 'object' || data.v !== VERSION) throw new Error('ลิงก์นี้มาจากแอปเวอร์ชันที่ไม่รองรับ');
-  const tpl = templates.find((t) => t.id === data.t);
+  let tpl = templates.find((t) => t.id === data.t && t.builtin);
+  if (!tpl && Array.isArray(data.T) && core) {
+    const [blocks, rowsPerBlock, choices, headerRows, numberColumn, across, aspect, name] = data.T;
+    const raw = { blocks, rowsPerBlock, choices, headerRows, numberColumn: numberColumn === 1, order: across === 1 ? 'across' : 'down', aspect, name };
+    const ints = [blocks, rowsPerBlock, choices, headerRows].every(Number.isInteger);
+    const cand = core.normalizeTemplate(raw);
+    if (!ints || core.validateTemplate(cand).length || cand.blocks !== blocks || cand.rowsPerBlock !== rowsPerBlock
+      || cand.choices !== choices || cand.headerRows !== headerRows) {
+      throw new Error('ข้อมูลแบบฟอร์มในลิงก์ไม่ถูกต้อง');
+    }
+    const id = typeof data.t === 'string' && /^tpl_[A-Za-z0-9]{6,40}$/.test(data.t) ? data.t : null;
+    tpl = Object.assign(cand, { id, custom: true });
+  }
   if (!tpl) throw new Error('ไม่รู้จักแบบฟอร์มกระดาษคำตอบในลิงก์นี้');
   const total = tpl.blocks * tpl.rowsPerBlock;
   const keyStr = typeof data.k === 'string' ? data.k : '';

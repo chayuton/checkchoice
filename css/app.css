@@ -214,10 +214,10 @@ button, input, select { font: inherit; color: inherit; }
 
 /* ------------------------------------------------------------------ ตารางคำตอบ (หน้าตาเหมือนกระดาษ) */
 .grid-slot { margin-top: 12px; }
-.answer-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+.answer-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(var(--choices, 5) * 48px + 110px)), 1fr)); }
 .grid-block { background: var(--paper); border: 1.5px solid var(--grid); align-self: start; }
-.grid-row { display: grid; grid-template-columns: var(--cell) repeat(5, minmax(var(--cell), 1fr)); }
-.mode-review .grid-row { grid-template-columns: var(--cell) repeat(5, minmax(40px, 1fr)) 62px; }
+.grid-row { display: grid; grid-template-columns: var(--cell) repeat(var(--choices, 5), minmax(var(--cell), 1fr)); }
+.mode-review .grid-row { grid-template-columns: var(--cell) repeat(var(--choices, 5), minmax(36px, 1fr)) 62px; }
 .grid-row + .grid-row { border-top: 1px solid var(--grid); }
 .cell { min-height: var(--cell); display: grid; place-items: center; border-left: 1px solid var(--grid); position: relative; padding: 0; }
 .cell:first-child { border-left: 0; }
@@ -373,6 +373,7 @@ button, input, select { font: inherit; color: inherit; }
 .import-facts div:first-child { border-left: 0; }
 .import-facts dt { font-size: 13px; color: var(--muted); }
 .import-facts dd { margin: 0; font-weight: 600; font-size: 18px; }
+.form-section > .import-facts:first-child { margin-top: 0; }
 .key-details summary { cursor: pointer; color: var(--ink); font-weight: 500; padding: 6px 0; }
 .key-preview { font-size: 14px; color: var(--graphite-2); word-spacing: 4px; line-height: 1.9; }
 
@@ -395,4 +396,84 @@ button, input, select { font: inherit; color: inherit; }
   .no-print, .appbar, .action-bar, .toast, .update-banner { display: none !important; }
   .report { border: 0; padding: 0; margin: 0; max-width: none; }
   .report-table tr { break-inside: avoid; }
+}
+
+/* ------------------------------------------------------------------ หน้าแรก */
+.home-title { font-size: 24px; margin: 6px 0 14px; }
+.start-choices { display: grid; gap: 12px; }
+@media (min-width: 600px) { .start-choices { grid-template-columns: 1fr 1fr; } }
+.choice {
+  display: flex; align-items: center; gap: 16px; padding: 18px 16px; min-height: 112px;
+  background: var(--paper); color: var(--graphite); text-decoration: none;
+  border: 1.5px solid var(--graphite); border-radius: 12px;
+  transition: background-color .12s, transform .12s;
+}
+.choice:hover { background: var(--paper-2); }
+.choice:active { transform: translateY(1px); }
+.choice-new { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.choice-text { display: grid; gap: 2px; min-width: 0; }
+.choice-title { font-size: 20px; font-weight: 600; }
+.choice-new .choice-title { color: var(--ink); }
+.choice-meta { font-size: 14px; color: var(--graphite-2); }
+.stack { position: relative; width: 64px; height: 72px; flex: none; }
+.stack-sheet { position: absolute; width: 50px; height: 62px; border: 1.5px solid var(--grid); border-radius: 3px; background: var(--paper); }
+.stack-sheet.s3 { left: 12px; top: 0; transform: rotate(7deg); }
+.stack-sheet.s2 { left: 7px; top: 4px; transform: rotate(3deg); }
+.stack-sheet.s1 { left: 2px; top: 8px; display: grid; place-items: center; border-color: var(--graphite);
+  background: repeating-linear-gradient(180deg, transparent 0 11px, var(--rule) 11px 12px), var(--paper); }
+.stack-count { font-weight: 600; font-size: 18px; background: var(--paper); padding: 0 4px; border-radius: 4px; }
+.mini-sheet-sm { transform: rotate(-3deg); box-shadow: 4px 5px 0 var(--rule); margin: 0; flex: none; }
+.mini-sheet-sm .mini-row { grid-template-columns: 20px repeat(4, 20px); }
+.mini-sheet-sm .mini-no, .mini-sheet-sm .mini-cell { height: 20px; font-size: 11px; }
+.mini-sheet-sm .mini-cell .pen-x { width: 16px; height: 16px; stroke-width: 3; }
+.home-section { margin-top: 26px; }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.home-h2 { font-size: 17px; color: var(--graphite-2); margin-bottom: 8px; }
+.exam-list-boxed { border-top: 1px solid var(--rule); border-radius: var(--radius); }
+.tool-list { list-style: none; margin: 0; padding: 0; background: var(--paper); border: 1px solid var(--rule); border-radius: var(--radius); }
+.tool-list li + li { border-top: 1px solid var(--rule); }
+.tool-list a { display: flex; align-items: center; gap: 14px; padding: 14px; color: var(--graphite); text-decoration: none; }
+.tool-list a:hover { background: var(--paper-2); }
+.tool-text { display: grid; flex: 1; min-width: 0; }
+.tool-title { font-weight: 600; }
+.tool-meta { font-size: 14px; color: var(--graphite-2); }
+.icon.chevron { width: 18px; height: 18px; color: var(--muted); }
+
+/* ------------------------------------------------------------------ คลังเฉลย */
+.search-bar { position: sticky; top: calc(60px + env(safe-area-inset-top)); z-index: 5; background: var(--desk); padding: 4px 0 8px; }
+.search-input { font-size: 16px; }
+.library-list { margin-top: 6px; }
+
+/* ------------------------------------------------------------------ แบบฟอร์ม */
+.lead { font-size: 15px; max-width: 46em; }
+.tpl-list { list-style: none; margin: 0; padding: 0; background: var(--paper); border: 1px solid var(--rule); border-top: 0; border-radius: 0 0 var(--radius) var(--radius); }
+.tpl-list li + li { border-top: 1px solid var(--rule); }
+.tpl-item { display: flex; align-items: center; gap: 14px; padding: 12px 14px; color: var(--graphite); text-decoration: none; }
+.tpl-item:hover { background: var(--paper-2); }
+.tpl-thumb { flex: none; border: 1px solid var(--rule); border-radius: 4px; background: #fff; }
+.tpl-text { display: grid; min-width: 0; }
+.tpl-name { font-weight: 600; }
+.tpl-meta { font-size: 14px; color: var(--graphite-2); }
+.tpl-date { font-size: 13px; color: var(--muted); }
+.facts-4 { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 420px) { .facts-4 { grid-template-columns: repeat(2, 1fr); } .facts-4 div:nth-child(3) { border-left: 0; } .facts-4 div:nth-child(n+3) { border-top: 1px solid var(--rule); } }
+.field-link { margin-top: 4px; font-size: 14px; }
+.field.switch { display: flex; margin-top: 14px; }
+
+/* กระดาษคำตอบเปล่าสำหรับพิมพ์ */
+.sheet-stage { overflow-x: auto; margin: 0 12px; padding-bottom: 40px; }
+.sheet-print { margin: 0 auto; background: #fff; color: #111; padding: 10mm; width: max-content; border: 1px solid var(--rule); }
+/* หัวกระดาษใช้หน่วย มม. ให้ความสูงรวมกับหมายเหตุท้ายตารางไม่เกิน 40 มม. ตาม sheetLayout() */
+.sheet-print h1 { font-size: 5mm; line-height: 1.3; text-align: center; margin: 0 0 1.5mm; }
+.sheet-fields { display: flex; gap: 6mm; font-size: 3.6mm; line-height: 1.5; margin: 1.2mm 0; white-space: nowrap; }
+.sheet-fields .dots { display: inline-block; border-bottom: 1.5px dotted #333; height: 1em; vertical-align: baseline; }
+.dots.w60 { width: 95mm; } .dots.w40 { width: 70mm; } .dots.w25 { width: 40mm; } .dots.w15 { width: 25mm; }
+.answer-sheet { border-collapse: collapse; table-layout: fixed; border: 0.7mm solid #111; margin-top: 3mm; }
+.answer-sheet td { border: 0.25mm solid #333; padding: 0; text-align: center; vertical-align: middle; font-size: 10pt; line-height: 1; overflow: hidden; }
+.answer-sheet td.hd { font-weight: 600; font-size: 10.5pt; }
+.answer-sheet td.no { color: #333; font-size: 9pt; }
+.sheet-note { font-size: 2.9mm; line-height: 1.4; color: #444; margin: 2mm 0 0; }
+@media print {
+  .sheet-stage { overflow: visible; margin: 0; padding: 0; }
+  .sheet-print { border: 0; padding: 0; margin: 0; width: auto; zoom: 1 !important; }
 }

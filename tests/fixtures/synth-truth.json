@@ -1,0 +1,53 @@
+{
+ "grid-100x5": {
+  "template": {
+   "blocks": 5,
+   "rows": 20,
+   "choices": 5,
+   "header": 2
+  },
+  "key": "CBCBBBBCCDBDDECDBABAEDBEBBBABDDBEEAEBEECECECECDDAACDCBDEDECBAECBACAAEBCEEBECCDAADBEAEBADADBEDEADBADA",
+  "student": "?DCADE?DCACEEA-ABEBCBBD?ACABABACABD-CDA-DCAADE?EEEADDABBDADECCACDEEADCDCCAECBCBE-DAABED-CDCAADC-BEDD",
+  "flags": {
+   "1": "multi",
+   "6": "changed",
+   "7": "multi",
+   "15": "blank",
+   "24": "multi",
+   "36": "blank",
+   "40": "blank",
+   "47": "multi",
+   "74": "changed",
+   "81": "blank",
+   "83": "changed",
+   "88": "blank",
+   "96": "blank"
+  }
+ },
+ "grid-120x4": {
+  "template": {
+   "blocks": 4,
+   "rows": 30,
+   "choices": 4,
+   "header": 2
+  },
+  "key": "CCBCCCBBADBBAAADDDDDDAAADCCBBDDCDCCDCCDCCACBBCCCBAACBABBDABDADAABBCCBDBBCBDADBDBCDCADDDBCAACADCDBCBABABBABACBACDAABCDCDD",
+  "student": "CAABBBACA-BBACAABB?BCBAAADCAACDCCACADDDCB?AD?CCBA-BDCACDCCCDB--BADCC?BBCCACDB-DBDBBBBCCADDC-AADCAAADDBBC-BDADDCDA-DABBCC",
+  "flags": {
+   "10": "blank",
+   "19": "multi",
+   "42": "multi",
+   "45": "multi",
+   "50": "blank",
+   "62": "blank",
+   "63": "blank",
+   "64": "changed",
+   "69": "multi",
+   "78": "blank",
+   "92": "blank",
+   "95": "changed",
+   "105": "blank",
+   "114": "blank"
+  }
+ }
+}

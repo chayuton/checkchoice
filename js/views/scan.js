@@ -39,6 +39,8 @@ export async function scanView(root, id) {
   let current = null;   // ผลที่รอตรวจทาน { no, panel, display, geom }
   let camera = null;
   let busy = false;
+  let saving = false;   // กำลังบันทึก: ออกจากหน้าได้ การบันทึกจะทำต่อจนเสร็จ
+  let alive = true;     // หน้านี้ยังแสดงอยู่ (ถ้าออกไปแล้วไม่ต้องอัปเดตหน้าจอหรือเปิดกล้อง)
 
   const nextUnscanned = (from) => {
     for (let n = from; n <= exam.maxStudentNo; n++) if (!results.has(n)) return n;
@@ -47,7 +49,7 @@ export async function scanView(root, id) {
   };
   let selectedNo = nextUnscanned(1);
 
-  setLeaveGuard(() => (current ? confirmDialog(`ผลตรวจเลขที่ ${current.no} ยังไม่ได้บันทึก ต้องการทิ้งผลนี้หรือไม่`, {
+  setLeaveGuard(() => (current && !saving ? confirmDialog(`ผลตรวจเลขที่ ${current.no} ยังไม่ได้บันทึก ต้องการทิ้งผลนี้หรือไม่`, {
     okText: 'ทิ้งผลนี้', danger: true,
   }) : true));
 
@@ -222,6 +224,7 @@ export async function scanView(root, id) {
         display: displayToCanvas(res.display),
         geom: { xs: res.xs, ys: res.ys, scale: res.display.scale },
         items: itemsFromDecisions(res.decisions),
+        densities: res.densities.map((row) => row.map((v) => Math.round(v * 10000) / 10000)),
         ms: res.ms,
       };
       setStatus(res.warning === 'orientation'
@@ -281,6 +284,7 @@ export async function scanView(root, id) {
     }
     const btn = document.getElementById('btn-save');
     if (btn) btn.disabled = true;
+    saving = true;
     try {
       const blob = await canvasToBlob(current.display, 'image/jpeg', 0.8);
       const rec = await saveResult({
@@ -288,6 +292,7 @@ export async function scanView(root, id) {
         studentNo: no,
         items: current.panel.items,
         geom: current.geom,
+        densities: current.densities,       // ค่าหมึกของแต่ละช่อง เก็บไว้เป็นข้อมูลสำหรับ Train
         createdAt: old ? old.createdAt : null,
       }, blob);
       results.set(no, rec);
@@ -295,6 +300,7 @@ export async function scanView(root, id) {
       const sc = scoreOf(exam, rec);
       toast(`บันทึกเลขที่ ${no} แล้ว ได้ ${sc.correct}/${sc.total} คะแนน`, 'ok');
       current = null;
+      if (!alive) return;
       selectedNo = nextUnscanned(no + 1);
       renderNoOptions();
       clear(reviewArea);
@@ -304,6 +310,8 @@ export async function scanView(root, id) {
     } catch (err) {
       toast(`บันทึกไม่สำเร็จ: ${err.message || err}`, 'error');
       if (btn) btn.disabled = false;
+    } finally {
+      saving = false;
     }
   }
 
@@ -313,5 +321,5 @@ export async function scanView(root, id) {
   initOMR().then(() => { if (!busy && !current) setStatus(''); })
     .catch((err) => setStatus(errorMessage({ error: 'opencv', message: err.message }), 'error'));
 
-  return () => stopCamera();
+  return () => { alive = false; stopCamera(); };
 }

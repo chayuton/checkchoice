@@ -3,6 +3,7 @@ import { h, clear, icon, toast, confirmDialog } from '../ui.js';
 import { appBar, go, setLeaveGuard } from '../nav.js';
 import {
   blankExam, getExam, saveExam, deleteExam, listExams, listResults, putBlob, getBlob, examTitle,
+  listTemplates, templateSummary,
 } from '../store.js';
 import { answerGrid } from '../grid.js';
 import { drawSheet, displayToCanvas, blobToImage } from '../overlay.js';
@@ -14,15 +15,17 @@ import { errorMessage } from './scan.js';
 
 const OMR = self.OMRCore;
 
-export async function examView(root, id) {
+export async function examView(root, id, presetTemplateId) {
   const isNew = !id;
   const stored = isNew ? null : await getExam(id);
+  const templates = await listTemplates();
   if (!isNew && !stored) {
     root.append(appBar({ title: 'ไม่พบชุดข้อสอบ', back: '#/' }),
       h('main', { class: 'page' }, h('p', { class: 'notice notice-error' }, 'ชุดข้อสอบนี้ถูกลบไปแล้ว')));
     return;
   }
-  const exam = stored ? JSON.parse(JSON.stringify(stored)) : blankExam();
+  const exam = stored ? JSON.parse(JSON.stringify(stored))
+    : blankExam(templates.find((x) => x.id === presetTemplateId) || templates[0]);
   const resultsCount = isNew ? 0 : (await listResults(id)).length;
   const others = await listExams();
   initOMR().catch(() => {});
@@ -42,7 +45,7 @@ export async function examView(root, id) {
 
   const t = examTitle(exam);
   root.append(appBar({
-    title: isNew ? 'สร้างชุดข้อสอบ' : t.exam,
+    title: isNew ? 'สร้างเฉลยใหม่' : t.exam,
     subtitle: isNew ? null : t.course,
     back: '#/',
   }));
@@ -57,11 +60,46 @@ export async function examView(root, id) {
   const fCode = h('input', { class: 'input', id: 'f-code', value: exam.courseCode, list: 'dl-codes', autocomplete: 'off', placeholder: 'เช่น 04-000-101', maxlength: 40 });
   const fName = h('input', { class: 'input', id: 'f-name', value: exam.courseName, list: 'dl-names', autocomplete: 'off', placeholder: 'เช่น เทคโนโลยีสารสนเทศเบื้องต้น', maxlength: 120 });
   const fExam = h('input', { class: 'input', id: 'f-exam', value: exam.examName, autocomplete: 'off', placeholder: 'เช่น สอบกลางภาค 1/2569', maxlength: 120 });
-  const maxQ = OMR.questionCount(exam.template);
+  let maxQ = OMR.questionCount(exam.template);
   const fCount = h('input', { class: 'input input-num', id: 'f-count', type: 'number', inputmode: 'numeric', min: 1, max: maxQ, value: String(exam.questionCount) });
+  const countHint = h('span', { class: 'field-hint' }, `ตรวจข้อ 1 ถึงข้อนี้ (สูงสุด ${maxQ})`);
   const fMaxNo = h('input', { class: 'input input-num', id: 'f-maxno', type: 'number', inputmode: 'numeric', min: 1, max: 999, value: String(exam.maxStudentNo) });
-  const fTemplate = h('select', { class: 'input', id: 'f-template', disabled: OMR.TEMPLATES.length < 2 },
-    OMR.TEMPLATES.map((tp) => h('option', { value: tp.id, selected: tp.id === exam.template.id }, tp.name)));
+  // ชุดข้อสอบที่ตรวจไปแล้วเปลี่ยนแบบฟอร์มไม่ได้ (ผลตรวจอ้างอิงตำแหน่งช่องของแบบฟอร์มเดิม)
+  const tplList = templates.some((x) => x.id === exam.template.id) ? templates : [exam.template, ...templates];
+  const fTemplate = h('select', { class: 'input', id: 'f-template', disabled: resultsCount > 0 },
+    tplList.map((tp) => h('option', { value: tp.id, selected: tp.id === exam.template.id }, tp.name)));
+  const tplHint = h('span', { class: 'field-hint' });
+  const updateTplHint = () => {
+    tplHint.textContent = resultsCount > 0
+      ? `${templateSummary(exam.template)} (ตรวจไปแล้ว จึงเปลี่ยนแบบฟอร์มไม่ได้)`
+      : templateSummary(exam.template);
+  };
+  updateTplHint();
+  fTemplate.addEventListener('change', async () => {
+    const next = tplList.find((x) => x.id === fTemplate.value);
+    if (!next) return;
+    const hasKey = exam.key.some((v) => v != null);
+    if (hasKey && !(await confirmDialog('เปลี่ยนแบบฟอร์มแล้วต้องถ่ายรูปใบเฉลยใหม่ (เฉลยที่ตรงเลขข้อจะเก็บไว้ให้) เปลี่ยนหรือไม่', { okText: 'เปลี่ยนแบบฟอร์ม' }))) {
+      fTemplate.value = exam.template.id;
+      return;
+    }
+    const total = OMR.questionCount(next);
+    exam.template = JSON.parse(JSON.stringify(next));
+    exam.key = Array.from({ length: total }, (_, i) => (exam.key[i] != null && exam.key[i] < next.choices ? exam.key[i] : null));
+    maxQ = total;
+    fCount.max = String(maxQ);
+    if (!countTouched || exam.questionCount > maxQ) { exam.questionCount = maxQ; fCount.value = String(maxQ); }
+    countHint.textContent = `ตรวจข้อ 1 ถึงข้อนี้ (สูงสุด ${maxQ})`;
+    keyImage = null; keyGeom = null; newOriginal = null; newTable = null; keyFlags = new Set();
+    exam.hasKeyImage = false;
+    delete exam.keyDensities;
+    sheetFig.hidden = true;
+    clear(originalLink);
+    keyStatus.textContent = '';
+    updateTplHint();
+    markDirty();
+    renderKey();
+  });
 
   fCode.addEventListener('input', () => {
     exam.courseCode = fCode.value.trim(); markDirty();
@@ -89,9 +127,11 @@ export async function examView(root, id) {
       field('รหัสวิชา', fCode),
       field('ชื่อวิชา', fName)),
     field('ชื่อการสอบ', fExam),
-    field('แบบฟอร์มกระดาษคำตอบ', fTemplate),
+    h('label', { class: 'field' },
+      h('span', { class: 'field-label' }, 'แบบฟอร์มกระดาษคำตอบ'), fTemplate, tplHint,
+      h('a', { class: 'link field-link', href: '#/templates/new' }, icon('plus'), 'เพิ่มแบบฟอร์มที่มีข้อมากขึ้น')),
     h('div', { class: 'field-row' },
-      field('จำนวนข้อสอบ', fCount, `ตรวจข้อ 1 ถึงข้อนี้ (สูงสุด ${maxQ})`),
+      h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'จำนวนข้อสอบ'), fCount, countHint),
       field('จำนวนเลขที่', fMaxNo, 'เพิ่มภายหลังได้ในหน้าตรวจ'))));
 
   // ---------------------------------------------------------------- เฉลย
@@ -151,6 +191,7 @@ export async function examView(root, id) {
       keyImage = newTable;
       keyGeom = { xs: res.xs, ys: res.ys, scale: res.display.scale };
       exam.key = res.decisions.map((d) => d.choice);
+      exam.keyDensities = res.densities.map((row) => row.map((v) => Math.round(v * 10000) / 10000));
       keyFlags = new Set(res.decisions.map((d, i) => (d.flag && d.flag !== 'blank' ? i + 1 : 0)).filter(Boolean));
       const last = OMR.lastMarkedQuestion(res.decisions);
       let note = '';
@@ -217,6 +258,9 @@ export async function examView(root, id) {
       const keyChanged = stored && JSON.stringify(stored.key) !== JSON.stringify(exam.key);
       if (newOriginal) exam.hasKeyImage = true;
       exam.keyGeom = keyGeom;
+      // เก็บเฉพาะโครงตารางในชุดข้อสอบ ไม่ต้องเก็บข้อมูลรูปตัวอย่างของแบบฟอร์ม
+      delete exam.template.sampleGeom;
+      delete exam.template.hasSample;
       await saveExam(exam);
       if (newOriginal) {
         await putBlob(`key:${exam.id}:original`, await canvasToBlob(newOriginal, 'image/jpeg', 0.85));

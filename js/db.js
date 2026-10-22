@@ -1,6 +1,6 @@
 // ที่เก็บข้อมูลในเครื่อง (IndexedDB) — ข้อมูลไม่ถูกส่งออกนอกอุปกรณ์
 const DB_NAME = 'checkchoice';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // v2: เพิ่มที่เก็บแบบฟอร์มกระดาษคำตอบ (templates)
 let dbPromise = null;
 
 export function openDB() {
@@ -18,10 +18,16 @@ export function openDB() {
         s.createIndex('examId', 'examId', { unique: false });
       }
       if (!db.objectStoreNames.contains('blobs')) db.createObjectStore('blobs', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('templates')) db.createObjectStore('templates', { keyPath: 'id' });
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      const db = req.result;
+      // ถ้าแท็บอื่นเปิดแอปเวอร์ชันใหม่ที่ต้องปรับฐานข้อมูล ให้ปิดการเชื่อมต่อของแท็บนี้แล้วโหลดใหม่
+      db.onversionchange = () => { db.close(); location.reload(); };
+      resolve(db);
+    };
     req.onerror = () => reject(req.error);
-    req.onblocked = () => reject(new Error('ฐานข้อมูลถูกเปิดค้างในอีกแท็บ กรุณาปิดแท็บอื่นของแอปนี้'));
+    req.onblocked = () => console.warn('รอแท็บอื่นของ CheckChoice ปิดฐานข้อมูลเวอร์ชันเก่า');
   });
   return dbPromise;
 }
@@ -88,10 +94,11 @@ export const db = {
   },
   /** อ่านทุกอย่างสำหรับไฟล์สำรอง */
   dumpAll() {
-    return run(['exams', 'results', 'blobs'], 'readonly', (tx) => Promise.all([
+    return run(['exams', 'results', 'blobs', 'templates'], 'readonly', (tx) => Promise.all([
       reqP(tx.objectStore('exams').getAll()),
       reqP(tx.objectStore('results').getAll()),
       reqP(tx.objectStore('blobs').getAll()),
-    ]).then(([exams, results, blobs]) => ({ exams, results, blobs })));
+      reqP(tx.objectStore('templates').getAll()),
+    ]).then(([exams, results, blobs, templates]) => ({ exams, results, blobs, templates })));
   },
 };
