@@ -243,6 +243,9 @@ button, input, select { font: inherit; color: inherit; }
 .cell-choice:hover { background: var(--ink-soft); }
 .pen-x { width: 30px; height: 30px; fill: none; stroke: var(--ink); stroke-width: 2.6; stroke-linecap: round; }
 .mode-key .cell-choice.sel { background: var(--ink-soft); }
+/* ข้อที่เฉลยหลายตัวเลือก */
+.mode-key .grid-row.is-multi .cell-no { font-weight: 700; color: var(--ink); }
+.mode-key .grid-row.is-multi .cell-no::after { content: "+"; position: absolute; right: 4px; top: 2px; font-size: 12px; }
 
 /* โหมดตรวจทาน */
 .is-right .cell-choice.sel { background: var(--green-soft); }

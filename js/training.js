@@ -45,7 +45,7 @@ export async function collectDataset() {
         cancelled: null,
         flag: null,
         edited: false,
-        confirmed: i < exam.questionCount && exam.key[i] != null,
+        confirmed: i < exam.questionCount && OMR.choiceSet(exam.key[i]).length > 0,
         density: exam.keyDensities && exam.keyDensities[i] ? exam.keyDensities[i] : null,
       }));
       sheets.push({ id: `key_${exam.id}`, source: 'key', examId: exam.id, template: cleanTemplate(t),
@@ -69,7 +69,7 @@ export async function collectDataset() {
     for (const q of s.questions) {
       if (!q.confirmed) continue;
       for (let c = 0; c < s.template.choices; c++) {
-        if (q.choice === c) stats.cells.mark++;
+        if (OMR.choiceSet(q.choice).includes(c)) stats.cells.mark++;
         else if (q.cancelled === c) stats.cells.cancelled++;
         else stats.cells.blank++;
       }
@@ -91,7 +91,7 @@ dataset.json
     xs, ys                 ตำแหน่งเส้นตารางแนวตั้ง/แนวนอน (พิกเซลของภาพ)
     questions[]
       q                    เลขข้อ
-      choice               ตัวเลือกที่เป็นคำตอบ (0 = A, 1 = B, …) หรือ null
+      choice               ตัวเลือกที่เป็นคำตอบ (0 = A, 1 = B, …) อาร์เรย์ของตัวเลือก (กากบาทหลายช่อง) หรือ null
       cancelled            ตัวเลือกที่ระบายทึบเพื่อยกเลิก หรือ null
       confirmed            true = อาจารย์ยืนยันแล้ว ใช้เป็นป้ายได้ (false = ไม่ควรใช้)
       density              สัดส่วนหมึกของแต่ละตัวเลือกที่แอปวัดได้

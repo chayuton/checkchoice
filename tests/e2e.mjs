@@ -472,6 +472,92 @@ try {
     await other.close();
   }
 
+  console.log('เฉลยหลายคำตอบในข้อเดียว');
+  {
+    // กระดาษจำลอง 100 ข้อ: นักศึกษากากบาท 2 ช่องในข้อ 1 (B,C) 7 (B,D) 24 (C,D) และ 47 (A,D)
+    const MULTI = { 1: 'BC', 7: 'BD', 24: 'CD' };
+    const rowSel = (q) => page.$$eval(`#q-${q} .cell-choice`, (cells) => cells.map((c, i) => (c.classList.contains('sel') ? 'ABCDE'[i] : '')).join(''));
+    const setKey = async (q, want) => {
+      const have = await rowSel(q);
+      for (const L of 'ABCDE') {
+        if (have.includes(L) !== want.includes(L)) await page.locator(`#q-${q} .cell-choice`).nth('ABCDE'.indexOf(L)).click();
+      }
+    };
+    await page.goto(base + '#/exam/new');
+    await page.locator('#f-template').selectOption('grid-100x5');
+    await page.locator('#f-code').fill('04-012-303');
+    await page.locator('#f-name').fill('สถิติเบื้องต้น');
+    await page.locator('#f-exam').fill('สอบย่อยเฉลยหลายคำตอบ');
+    await page.locator('#f-multi').selectOption('all');
+    check(/ครบทุกช่องที่เฉลย/.test(await page.locator('#multi-hint').textContent()), 'เลือกกติกา "ต้องกากบาทครบทุกตัวเลือกที่เฉลย" แล้วมีคำอธิบาย');
+    await chooseFile('เลือกรูปจากเครื่อง', fx('synth-grid-100x5-key.jpg'));
+    await page.locator('.key-status.ok').waitFor({ timeout: 90000 });
+    for (const [q, want] of Object.entries(MULTI)) await setKey(q, want);
+    const sel = await Promise.all(Object.keys(MULTI).map(rowSel));
+    check(JSON.stringify(sel) === JSON.stringify(Object.values(MULTI)), `แตะเลือกเฉลยได้หลายช่องในข้อเดียว (${sel.join(', ')})`);
+    check(/เฉลยหลายตัวเลือก 3 ข้อ/.test(await page.locator('.key-summary').textContent())
+      && await page.locator('.grid-row.is-multi').count() === 3, 'สรุปจำนวนข้อที่เฉลยหลายตัวเลือก และทำเครื่องหมายที่ข้อนั้น');
+    await shot('15a-multi-key');
+    await page.getByRole('button', { name: 'บันทึกแล้วเริ่มตรวจ' }).click();
+    await page.locator('#student-no').waitFor();
+    const examMulti = page.url().split('#/exam/')[1].split('/')[0];
+    await page.locator('#student-no').selectOption('1');
+    await chooseFile('เลือกรูปจากเครื่อง', fx('synth-grid-100x5-student.jpg'));
+    await page.locator('.score-big').waitFor({ timeout: 90000 });
+    const T = synth['grid-100x5'];
+    const flagCount = Object.keys(T.flags).length;
+    const pendingNow = await page.locator('.grid-row.is-pending').count();
+    check(pendingNow === flagCount - 3, `ข้อที่กากบาทครบตามเฉลยหลายตัวเลือกไม่ต้องยืนยัน (รอยืนยัน ${pendingNow} จาก ${flagCount} ข้อ)`);
+    check(await page.locator('#q-47.is-pending').count() === 1, 'ข้อที่เฉลยตัวเลือกเดียวแต่กากบาท 2 ช่อง ยังให้อาจารย์ยืนยัน');
+    check(await page.locator('#q-1.is-right').count() === 1 && (await rowSel(1)) === 'BC', 'ข้อ 1 กากบาท B,C ตรงกับเฉลย ได้คะแนน');
+    const bulk2 = page.locator('.chip-action');
+    if (await bulk2.count()) await bulk2.click();
+    for (let guard = 0; guard < 60 && await page.locator('.grid-row.is-pending .confirm').count(); guard++) {
+      await page.locator('.grid-row.is-pending .confirm').first().click();
+    }
+    // คะแนนที่คาด: ข้อที่ตอบช่องเดียวตรงเฉลย + 3 ข้อที่กากบาทครบตามเฉลยหลายตัวเลือก
+    const keyArr = [...T.key].map((c, i) => (MULTI[i + 1] ? MULTI[i + 1] : c));
+    const wantAll = [...T.student].filter((c, i) => c === keyArr[i]).length + 3;
+    const gotAll = Number(await page.locator('.score-big').textContent());
+    check(gotAll === wantAll, `กติกา "กากบาทครบ" ได้ ${gotAll}/100 คะแนน (คาดไว้ ${wantAll})`);
+    await shot('15b-multi-review');
+    await page.locator('#btn-save').click();
+    await page.getByText('บันทึกเลขที่ 1 แล้ว').waitFor();
+
+    // เปลี่ยนเป็น "ตอบตัวเลือกใดก็ได้ที่เฉลย": กากบาท 2 ช่องไม่ได้คะแนน แต่ตอบช่องเดียวที่อยู่ในเฉลยได้คะแนน
+    await page.goto(base + `#/exam/${examMulti}`);
+    await page.locator('#f-multi').waitFor();
+    check(await page.locator('#f-multi').inputValue() === 'all' && (await rowSel(7)) === 'BD', 'เปิดชุดข้อสอบอีกครั้ง กติกาและเฉลยหลายตัวเลือกยังอยู่');
+    await page.locator('#f-multi').selectOption('any');
+    await page.getByRole('button', { name: 'บันทึกชุดข้อสอบ' }).click();
+    await page.getByText(/คิดใหม่ตามเฉลยที่แก้/).waitFor();
+    await page.goto(base + `#/exam/${examMulti}/results`);
+    await page.locator('.score-table').waitFor();
+    const anyScore = await page.$eval('.score-table tbody tr', (tr) => tr.cells[1].textContent.trim());
+    const singleIn = [...T.student].filter((c, i) => MULTI[i + 1] && MULTI[i + 1].includes(c)).length;
+    const wantAny = wantAll - 3 + singleIn;
+    check(anyScore === `${wantAny}/100`, `เปลี่ยนเป็นกติกา "ตอบตัวเลือกใดก็ได้" คะแนนคิดใหม่เป็น ${anyScore} (คาดไว้ ${wantAny}/100)`);
+
+    // ส่งไปเครื่องอื่น: เฉลยหลายตัวเลือกและกติกาติดไปด้วย
+    await page.goto(base + `#/exam/${examMulti}`);
+    await page.locator('#btn-transfer').click();
+    await page.locator('#transfer-dialog').waitFor();
+    const linkM = await page.locator('#transfer-link').inputValue();
+    await page.getByRole('button', { name: 'เสร็จแล้ว' }).click();
+    const other = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'th-TH' });
+    const p2 = await other.newPage();
+    await p2.goto(linkM);
+    await p2.locator('#btn-import').waitFor();
+    check(/ตอบตัวเลือกใดก็ได้/.test(await p2.locator('.import-facts').innerText()), 'หน้านำเข้าบอกกติกาเฉลยหลายคำตอบ');
+    await p2.locator('#btn-import').click();
+    await p2.locator('#student-no').waitFor();
+    await p2.goto(base + `#/exam/${examMulti}`);
+    await p2.locator('#q-24').waitFor();
+    const sel24 = await p2.$$eval('#q-24 .cell-choice', (cells) => cells.map((c, i) => (c.classList.contains('sel') ? 'ABCDE'[i] : '')).join(''));
+    check(sel24 === 'CD' && await p2.locator('#f-multi').inputValue() === 'any', 'เครื่องปลายทางได้เฉลยหลายตัวเลือกและกติกาครบ');
+    await other.close();
+  }
+
   console.log('พิมพ์กระดาษคำตอบเปล่า 120 ข้อ แล้วอ่านกลับด้วยตัวช่วยเพิ่มแบบฟอร์ม');
   await page.goto(base + '#/templates/grid-120x4/print');
   await page.locator('.answer-sheet').waitFor();
@@ -511,7 +597,14 @@ try {
   const dsPath = path.join(out, 'dataset.zip');
   await ds.saveAs(dsPath);
   const mk = spawnSync('python3', [path.join(root, 'tools/make_cells.py'), dsPath, path.join(out, 'cells')], { encoding: 'utf8' });
-  check(mk.status === 0 && /จาก 8 ภาพ/.test(mk.stdout), `ส่งออกชุดข้อมูลและตัดช่องได้: ${(mk.stdout || mk.stderr).trim()}`);
+  // ชุดกลางภาค (เฉลย + 3 แผ่น) + 100 ข้อ (เฉลย + 1 แผ่น) + เฉลยหลายคำตอบ (เฉลย + 1 แผ่น) + กระดาษเปล่าของแบบฟอร์มที่เพิ่ม
+  check(mk.status === 0 && /จาก 9 ภาพ/.test(mk.stdout), `ส่งออกชุดข้อมูลและตัดช่องได้: ${(mk.stdout || mk.stderr).trim()}`);
+  {
+    const csv = readFileSync(path.join(out, 'cells', 'cells.csv'), 'utf8').split('\n').map((l) => l.split(','));
+    const q1 = csv.filter((c) => c[1] === 'mark' && c[3] === 'result' && c[5] === '1' && /res_ex_/.test(c[2]));
+    const multiSheet = q1.filter((c) => q1.filter((d) => d[2] === c[2]).length === 2);
+    check(multiSheet.length === 2, 'ข้อที่กากบาทหลายช่องได้ป้าย mark ทุกช่องในชุดข้อมูล');
+  }
 
   console.log('สำรองข้อมูล');
   await page.goto(base + '#/settings');

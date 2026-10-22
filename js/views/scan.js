@@ -229,7 +229,7 @@ export async function scanView(root, id) {
         no: selectedNo,
         display: displayToCanvas(res.display),
         geom: { xs: res.xs, ys: res.ys, scale: res.display.scale },
-        items: itemsFromDecisions(res.decisions),
+        items: itemsFromDecisions(res.decisions, exam),
         densities: res.densities.map((row) => row.map((v) => Math.round(v * 10000) / 10000)),
         ms: res.ms,
       };

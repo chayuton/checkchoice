@@ -3,7 +3,7 @@ import { h, clear, icon, toast, confirmDialog } from '../ui.js';
 import { appBar, go, setLeaveGuard } from '../nav.js';
 import {
   blankExam, getExam, saveExam, listExams, listResults, putBlob, getBlob, examTitle,
-  listTemplates, templateSummary,
+  listTemplates, templateSummary, multiRuleOf,
 } from '../store.js';
 import { answerGrid } from '../grid.js';
 import { drawSheet, displayToCanvas, blobToImage } from '../overlay.js';
@@ -34,6 +34,7 @@ export async function examView(root, id, presetTemplateId) {
   let dirty = false;
   let countTouched = !isNew;
   let keyFlags = new Set();         // ข้อที่อ่านเฉลยไม่ชัด รอครูแตะแก้
+  let keyDecisions = null;          // ผลอ่านใบเฉลยล่าสุด (ใช้เมื่อเปิดตัวเลือกเฉลยหลายคำตอบภายหลัง)
   let keyImage = null;              // ภาพตาราง (สำหรับวาดกรอบ)
   let keyGeom = exam.keyGeom || null;
   let newOriginal = null;           // canvas ภาพต้นฉบับใหม่ที่ยังไม่บันทึก
@@ -86,12 +87,12 @@ export async function examView(root, id, presetTemplateId) {
     }
     const total = OMR.questionCount(next);
     exam.template = JSON.parse(JSON.stringify(next));
-    exam.key = Array.from({ length: total }, (_, i) => (exam.key[i] != null && exam.key[i] < next.choices ? exam.key[i] : null));
+    exam.key = Array.from({ length: total }, (_, i) => OMR.packChoices(OMR.choiceSet(exam.key[i]).filter((c) => c < next.choices)));
     maxQ = total;
     fCount.max = String(maxQ);
     if (!countTouched || exam.questionCount > maxQ) { exam.questionCount = maxQ; fCount.value = String(maxQ); }
     countHint.textContent = `ตรวจข้อ 1 ถึงข้อนี้ (สูงสุด ${maxQ})`;
-    keyImage = null; keyGeom = null; newOriginal = null; newTable = null; keyFlags = new Set();
+    keyImage = null; keyGeom = null; newOriginal = null; newTable = null; keyFlags = new Set(); keyDecisions = null;
     exam.hasKeyImage = false;
     delete exam.keyDensities;
     sheetFig.hidden = true;
@@ -143,6 +144,52 @@ export async function examView(root, id, presetTemplateId) {
   const gridSlot = h('div', { class: 'grid-slot' });
   const originalLink = h('p', { class: 'original-link' });
 
+  // ---------------------------------------------------------------- เฉลยหลายคำตอบ
+  const fMulti = h('select', { class: 'input', id: 'f-multi' },
+    h('option', { value: '' }, 'ไม่ใช้: เฉลยข้อละ 1 ตัวเลือก'),
+    h('option', { value: 'any' }, 'ตอบตัวเลือกใดก็ได้ที่เฉลยไว้ (ตอบช่องเดียว)'),
+    h('option', { value: 'all' }, 'ต้องกากบาทครบทุกตัวเลือกที่เฉลย'));
+  fMulti.value = multiRuleOf(exam) || '';
+  const multiHint = h('span', { class: 'field-hint', id: 'multi-hint' });
+  const updateMultiHint = () => {
+    const r = multiRuleOf(exam);
+    multiHint.textContent = !r
+      ? 'เปิดเมื่อบางข้อมีคำตอบที่ถูกได้มากกว่า 1 ตัวเลือก'
+      : r === 'any'
+        ? 'แตะได้หลายช่องในข้อเดียว นักศึกษากากบาทช่องใดช่องหนึ่งที่เฉลยไว้ก็ได้คะแนน ถ้ากากบาทหลายช่องต้องให้อาจารย์ยืนยัน'
+        : 'แตะได้หลายช่องในข้อเดียว นักศึกษาต้องกากบาทครบทุกช่องที่เฉลยและไม่เกิน จึงได้คะแนน ข้อที่เฉลยช่องเดียวตรวจแบบเดิม';
+  };
+  updateMultiHint();
+  fMulti.addEventListener('change', async () => {
+    const prev = multiRuleOf(exam);
+    const next = OMR.MULTI_RULES.includes(fMulti.value) ? fMulti.value : null;
+    if (!next) {
+      const multiQs = [];
+      exam.key.forEach((v, i) => { if (OMR.choiceSet(v).length > 1) multiQs.push(i + 1); });
+      if (multiQs.length) {
+        const ok = await confirmDialog(`ข้อ ${multiQs.slice(0, 12).join(', ')}${multiQs.length > 12 ? ' …' : ''} มีเฉลยหลายตัวเลือก ถ้าปิดตัวเลือกนี้ ข้อเหล่านี้จะไม่มีเฉลยและต้องแตะเลือกใหม่ข้อละ 1 ตัวเลือก ปิดหรือไม่`,
+          { okText: 'ปิดเฉลยหลายคำตอบ' });
+        if (!ok) { fMulti.value = prev || ''; return; }
+        multiQs.forEach((q) => { exam.key[q - 1] = null; keyFlags.add(q); });
+      }
+      delete exam.multiAnswer;
+    } else {
+      exam.multiAnswer = next;
+      // ใบเฉลยที่อ่านไว้แล้ว: ข้อที่กากบาทหลายช่องใช้ทุกช่องเป็นเฉลย
+      if (!prev && keyDecisions) {
+        keyDecisions.forEach((d, i) => {
+          if (d.flag === 'multi' && d.marks && d.marks.length > 1 && exam.key[i] == null) {
+            exam.key[i] = OMR.packChoices(d.marks);
+            keyFlags.delete(i + 1);
+          }
+        });
+      }
+    }
+    updateMultiHint();
+    markDirty();
+    renderKey();
+  });
+
   const busyBtn = (b, on) => { b.disabled = on; };
   const btnShoot = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => takeKey(true) }, icon('camera'), 'ถ่ายรูปใบเฉลย');
   const btnPick = h('button', { type: 'button', class: 'btn btn-quiet', onclick: () => takeKey(false) }, icon('image'), 'เลือกรูปจากเครื่อง');
@@ -150,20 +197,30 @@ export async function examView(root, id, presetTemplateId) {
   main.append(h('section', { class: 'form-section' },
     h('h2', { class: 'section-title' }, 'เฉลย'),
     h('p', { class: 'section-help' }, 'ถ่ายรูปใบเฉลยที่กากบาทไว้ ให้เห็นตารางครบทั้ง 4 มุม หรือแตะช่องในตารางด้านล่างเพื่อกำหนดเฉลยเอง'),
+    h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'เฉลยหลายคำตอบในข้อเดียว'), fMulti, multiHint),
     h('div', { class: 'btn-row' }, btnShoot, btnPick),
     keyStatus, sheetFig, originalLink, keySummary, gridSlot));
 
   function renderKey() {
     // นับข้อที่มีเฉลย
-    let have = 0;
-    for (let i = 0; i < exam.questionCount; i++) if (exam.key[i] != null) have++;
+    let have = 0, multiCount = 0;
+    for (let i = 0; i < exam.questionCount; i++) {
+      const n = OMR.choiceSet(exam.key[i]).length;
+      if (n) have++;
+      if (n > 1) multiCount++;
+    }
+    // ใบเฉลยที่กากบาทหลายช่องแต่ยังไม่ได้เปิดตัวเลือกเฉลยหลายคำตอบ
+    const multiOnSheet = !multiRuleOf(exam) && keyDecisions
+      ? [...keyFlags].filter((q) => q <= exam.questionCount && keyDecisions[q - 1] && keyDecisions[q - 1].flag === 'multi').length : 0;
     keySummary.textContent = `มีเฉลยแล้ว ${have} จาก ${exam.questionCount} ข้อ` +
-      (keyFlags.size ? ` อ่านไม่ชัด ${keyFlags.size} ข้อ (แถบสีเหลือง) แตะช่องที่ถูกต้องเพื่อแก้` : '');
+      (multiCount ? ` (เฉลยหลายตัวเลือก ${multiCount} ข้อ)` : '') +
+      (keyFlags.size ? ` อ่านไม่ชัด ${keyFlags.size} ข้อ (แถบสีเหลือง) แตะช่องที่ถูกต้องเพื่อแก้` : '') +
+      (multiOnSheet ? ` ถ้าข้อที่กากบาทหลายช่องมีคำตอบถูกหลายตัวเลือก ให้เลือก "เฉลยหลายคำตอบในข้อเดียว" ด้านบน` : '');
     keySummary.className = keyFlags.size ? 'key-summary warn' : 'key-summary';
     const grid = answerGrid({
-      template: exam.template, count: exam.questionCount, mode: 'key', key: exam.key,
+      template: exam.template, count: exam.questionCount, mode: 'key', key: exam.key, multi: multiRuleOf(exam),
       onChange: (next) => {
-        next.forEach((v, i) => { if (v !== exam.key[i]) keyFlags.delete(i + 1); });
+        next.forEach((v, i) => { if (JSON.stringify(v) !== JSON.stringify(exam.key[i])) keyFlags.delete(i + 1); });
         exam.key = next;
         markDirty();
         renderKey();
@@ -173,7 +230,7 @@ export async function examView(root, id, presetTemplateId) {
     clear(gridSlot).append(grid);
     if (keyImage && keyGeom) {
       sheetFig.hidden = false;
-      drawSheet(sheetCanvas, keyImage, keyGeom, exam.template, { count: exam.questionCount, key: exam.key, mode: 'key' });
+      drawSheet(sheetCanvas, keyImage, keyGeom, exam.template, { count: exam.questionCount, key: exam.key, mode: 'key', multi: multiRuleOf(exam) });
     }
   }
 
@@ -191,9 +248,13 @@ export async function examView(root, id, presetTemplateId) {
       newTable = displayToCanvas(res.display);
       keyImage = newTable;
       keyGeom = { xs: res.xs, ys: res.ys, scale: res.display.scale };
-      exam.key = res.decisions.map((d) => d.choice);
+      keyDecisions = res.decisions;
+      const multiOn = !!multiRuleOf(exam);
+      // เปิดเฉลยหลายคำตอบไว้: ข้อที่กากบาทหลายช่องใช้ทุกช่องเป็นเฉลย
+      const useMarks = (d) => multiOn && d.flag === 'multi' && d.marks && d.marks.length > 1;
+      exam.key = res.decisions.map((d) => (useMarks(d) ? OMR.packChoices(d.marks) : d.choice));
       exam.keyDensities = res.densities.map((row) => row.map((v) => Math.round(v * 10000) / 10000));
-      keyFlags = new Set(res.decisions.map((d, i) => (d.flag && d.flag !== 'blank' ? i + 1 : 0)).filter(Boolean));
+      keyFlags = new Set(res.decisions.map((d, i) => (d.flag && d.flag !== 'blank' && !useMarks(d) ? i + 1 : 0)).filter(Boolean));
       const last = OMR.lastMarkedQuestion(res.decisions);
       let note = '';
       if (!countTouched && last > 0) {
@@ -239,7 +300,7 @@ export async function examView(root, id, presetTemplateId) {
       return;
     }
     const missing = [];
-    for (let i = 0; i < exam.questionCount; i++) if (exam.key[i] == null) missing.push(i + 1);
+    for (let i = 0; i < exam.questionCount; i++) if (!OMR.choiceSet(exam.key[i]).length) missing.push(i + 1);
     if (missing.length === exam.questionCount) {
       toast('ยังไม่มีเฉลย ถ่ายรูปใบเฉลยหรือแตะเลือกคำตอบในตาราง', 'error');
       return;
@@ -256,7 +317,8 @@ export async function examView(root, id, presetTemplateId) {
     }
     btnSave.disabled = true;
     try {
-      const keyChanged = stored && JSON.stringify(stored.key) !== JSON.stringify(exam.key);
+      const keyChanged = stored && (JSON.stringify(stored.key) !== JSON.stringify(exam.key)
+        || (stored.multiAnswer || null) !== (exam.multiAnswer || null));
       if (newOriginal) exam.hasKeyImage = true;
       exam.keyGeom = keyGeom;
       // เก็บเฉพาะโครงตารางในชุดข้อสอบ ไม่ต้องเก็บข้อมูลรูปตัวอย่างของแบบฟอร์ม

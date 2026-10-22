@@ -11,7 +11,7 @@ function cssVar(name, fallback) {
  * geom: { xs, ys, scale } (พิกัดในภาพดัดตรงขนาดเต็ม)
  * mode: 'key' | 'review'
  */
-export function drawSheet(canvas, image, geom, template, { count, key, items, mode }) {
+export function drawSheet(canvas, image, geom, template, { count, key, items, mode, multi }) {
   const w = image.width || image.naturalWidth;
   const hgt = image.height || image.naturalHeight;
   canvas.width = w;
@@ -38,8 +38,8 @@ export function drawSheet(canvas, image, geom, template, { count, key, items, mo
       continue;
     }
     if (mode === 'key') {
-      if (key[i] != null) {
-        const cell = OMR.cellOf(template, q, key[i]);
+      for (const c of OMR.choiceSet(key[i])) {
+        const cell = OMR.cellOf(template, q, c);
         ctx.strokeStyle = ink;
         ctx.lineWidth = lw;
         ctx.strokeRect(...rect(cell.row, cell.col));
@@ -54,22 +54,29 @@ export function drawSheet(canvas, image, geom, template, { count, key, items, mo
       const a = rect(first.row, first.col, 0), b = rect(last.row, last.col, 0);
       ctx.fillRect(a[0], a[1], b[0] + b[2] - a[0], a[3]);
     }
-    const k = key[i];
-    if (it.choice != null) {
-      const cell = OMR.cellOf(template, q, it.choice);
-      const ok = !pending && k != null && k === it.choice;
-      ctx.strokeStyle = pending ? cssVar('--hl-edge', '#D9A600') : (ok ? green : red);
+    const keySet = OMR.choiceSet(key[i]);
+    const chosen = OMR.choiceSet(it.choice);
+    const ok = !pending && OMR.isCorrect(key[i], it.choice, multi);
+    for (const c of chosen) {
+      const cell = OMR.cellOf(template, q, c);
+      // ข้อที่ผิด: ช่องที่ตรงกับเฉลยยังเป็นสีเขียว ช่องที่ไม่ใช่เฉลยเป็นสีแดง
+      const good = ok || keySet.includes(c);
+      ctx.strokeStyle = pending ? cssVar('--hl-edge', '#D9A600') : (good ? green : red);
       ctx.lineWidth = lw;
       ctx.strokeRect(...rect(cell.row, cell.col));
     }
-    if (!pending && k != null && it.choice !== k) {
-      const cell = OMR.cellOf(template, q, k);
-      ctx.save();
-      ctx.setLineDash([lw * 2, lw * 2]);
-      ctx.strokeStyle = green;
-      ctx.lineWidth = lw;
-      ctx.strokeRect(...rect(cell.row, cell.col, lw + 2));
-      ctx.restore();
+    if (!pending && !ok) {
+      // เส้นประสีเขียว = ช่องเฉลยที่นักศึกษาไม่ได้กากบาท
+      for (const c of keySet) {
+        if (chosen.includes(c)) continue;
+        const cell = OMR.cellOf(template, q, c);
+        ctx.save();
+        ctx.setLineDash([lw * 2, lw * 2]);
+        ctx.strokeStyle = green;
+        ctx.lineWidth = lw;
+        ctx.strokeRect(...rect(cell.row, cell.col, lw + 2));
+        ctx.restore();
+      }
     }
   }
 }

@@ -1,6 +1,8 @@
 // ส่งออกผลคะแนนเป็น Excel และสำรอง/กู้คืนข้อมูลทั้งหมด
 import { db } from './db.js';
-import { scoreOf, letterOf, examTitle } from './store.js';
+import { scoreOf, letterOf, examTitle, multiRuleOf, MULTI_TEXT } from './store.js';
+
+const OMR = self.OMRCore;
 
 function loadScript(src) {
   return new Promise((resolve, reject) => {
@@ -47,6 +49,7 @@ export async function exportExcel(exam, results) {
     ['รายวิชา', t.course],
     ['การสอบ', t.exam],
     ['จำนวนข้อ', N],
+    ...(multiRuleOf(exam) ? [['เฉลยหลายคำตอบ', MULTI_TEXT[multiRuleOf(exam)]]] : []),
     ['ส่งออกเมื่อ', todayText()],
     [],
     ['เลขที่', 'จำนวนข้อที่ถูก', 'จำนวนข้อทั้งหมด', 'หมายเหตุ'],
@@ -65,7 +68,7 @@ export async function exportExcel(exam, results) {
       const it = r.items[i] || {};
       const pending = it.flag && !it.resolved;
       row.push(pending ? '?' : letterOf(it.choice, exam.template));
-      if (!pending && exam.key[i] != null && it.choice === exam.key[i]) rightCount[i]++;
+      if (!pending && OMR.isCorrect(exam.key[i], it.choice, exam.multiAnswer)) rightCount[i]++;
     }
     return row;
   });

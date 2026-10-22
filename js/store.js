@@ -131,13 +131,25 @@ export const getBlob = (id) => db.get('blobs', id).then((r) => (r ? r.blob : nul
 
 /** คะแนนของผลตรวจ คิดจากเฉลยปัจจุบัน (ถ้าแก้เฉลยภายหลัง คะแนนจะเปลี่ยนตาม) */
 export function scoreOf(exam, result) {
-  return OMR.grade(exam.key, result.items, exam.questionCount);
+  return OMR.grade(exam.key, result.items, exam.questionCount, exam.multiAnswer);
 }
 
+/** กติกาเฉลยหลายคำตอบของชุดข้อสอบ: 'any' | 'all' | null (เฉลยข้อละ 1 ตัวเลือก) */
+export function multiRuleOf(exam) {
+  return exam && OMR.MULTI_RULES.includes(exam.multiAnswer) ? exam.multiAnswer : null;
+}
+
+export const MULTI_TEXT = {
+  any: 'ตอบตัวเลือกใดก็ได้ที่เฉลยไว้',
+  all: 'ต้องกากบาทครบทุกตัวเลือกที่เฉลย',
+};
+
+/** ตัวอักษรของคำตอบ หลายตัวเลือกคั่นด้วยจุลภาค เช่น "A,C" */
 export function letterOf(choice, template) {
-  if (choice == null) return '';
+  const set = OMR.choiceSet(choice);
+  if (!set.length) return '';
   const labels = (template && template.choiceLabels) || LETTERS;
-  return labels[choice] || '?';
+  return set.map((c) => labels[c] || '?').join(',');
 }
 
 export function examTitle(exam) {
@@ -145,15 +157,22 @@ export function examTitle(exam) {
   return { course, exam: exam.examName || 'ไม่มีชื่อการสอบ' };
 }
 
-/** สร้างรายการคำตอบจากผลอ่านภาพ */
-export function itemsFromDecisions(decisions) {
-  return decisions.map((d) => ({
-    choice: d.choice,
-    flag: d.flag,
-    cancelled: d.cancelled,
-    resolved: !d.flag,
-    edited: false,
-  }));
+/**
+ * สร้างรายการคำตอบจากผลอ่านภาพ
+ * ชุดข้อสอบที่ให้กากบาทครบทุกตัวเลือกที่เฉลย (multiAnswer 'all'):
+ *  ข้อที่เฉลยหลายตัวเลือกและนักศึกษากากบาทหลายช่อง ใช้ทุกช่องเป็นคำตอบโดยไม่ต้องยืนยัน
+ *  ข้อที่เฉลยตัวเลือกเดียวแต่กากบาทหลายช่อง ยังให้อาจารย์ยืนยัน แต่เติมช่องที่กากบาทไว้ให้เห็น
+ */
+export function itemsFromDecisions(decisions, exam) {
+  const all = multiRuleOf(exam) === 'all';
+  return decisions.map((d, i) => {
+    const it = { choice: d.choice, flag: d.flag, cancelled: d.cancelled, resolved: !d.flag, edited: false };
+    if (all && d.flag === 'multi' && d.marks && d.marks.length > 1) {
+      it.choice = OMR.packChoices(d.marks);
+      if (OMR.choiceSet(exam.key[i]).length > 1) { it.flag = null; it.resolved = true; it.multiMark = true; }
+    }
+    return it;
+  });
 }
 
 /** ข้อที่ยังต้องยืนยัน (เฉพาะข้อที่อยู่ในจำนวนข้อสอบ) */

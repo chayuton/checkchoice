@@ -1,7 +1,7 @@
 /* Service worker: เก็บไฟล์แอปไว้ในเครื่องเพื่อใช้งานออฟไลน์
    - ไฟล์ใน vendor/ fonts/ icons/ (ใหญ่และไม่ค่อยเปลี่ยน): ใช้จากแคชก่อน
    - ไฟล์แอปอื่น ๆ: ดึงจากเครือข่ายก่อน (ได้เวอร์ชันล่าสุดเสมอ) ถ้าออฟไลน์ใช้จากแคช */
-const CACHE = 'checkchoice-v5';
+const CACHE = 'checkchoice-v6';
 const SHELL = [
   './',
   'index.html',

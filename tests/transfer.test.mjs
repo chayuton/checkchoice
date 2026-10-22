@@ -61,5 +61,42 @@ console.log('แบบฟอร์มที่เพิ่มเองต้อ�
   throws(() => decodeExam(enc({ v: 1, t: 'tpl_x1y2z3', T: ['5', 20, 5, 2, 1, 0, 1.7, 'x'], k: '' }), OMR.TEMPLATES, OMR), 'ค่าที่ไม่ใช่ตัวเลขถูกปฏิเสธ');
 }
 
+console.log('เฉลยหลายคำตอบ: การคิดคะแนน');
+{
+  const it = (choice, flag = null, resolved = true) => ({ choice, flag, resolved });
+  check(OMR.isCorrect([0, 2], 0, 'any') && OMR.isCorrect([0, 2], 2, 'any') && !OMR.isCorrect([0, 2], 1, 'any'),
+    "'any': ตอบตัวเลือกใดก็ได้ที่เฉลยไว้ได้คะแนน ตัวเลือกอื่นไม่ได้");
+  check(!OMR.isCorrect([0, 2], [0, 2], 'any'), "'any': กากบาทหลายช่องไม่ได้คะแนน");
+  check(OMR.isCorrect([0, 2], [2, 0], 'all') && !OMR.isCorrect([0, 2], 0, 'all') && !OMR.isCorrect([0, 2], [0, 1, 2], 'all'),
+    "'all': ต้องกากบาทครบทุกช่องที่เฉลยและไม่เกิน");
+  check(OMR.isCorrect(1, 1, 'all') && !OMR.isCorrect(1, [1, 3], 'all') && OMR.isCorrect(1, 1) && !OMR.isCorrect(null, 1),
+    'ข้อที่เฉลยตัวเลือกเดียวตรวจแบบเดิม ข้อที่ไม่มีเฉลยไม่ได้คะแนน');
+  const k = [0, [1, 3], [0, 2], null];
+  const items = [it(0), it(3), it([0, 2]), it(1)];
+  check(OMR.grade(k, items, 4, 'any').correct === 2 && OMR.grade(k, items, 4, 'all').correct === 2
+    && OMR.grade(k, items, 4).correct === 2, 'คิดคะแนนรวมตามกติกาที่เลือก');
+  check(OMR.grade(k, [it(0), it(null, 'multi', false)], 2, 'all').pending === 1, 'ข้อที่ยังรอยืนยันนับเป็นศูนย์');
+  check(JSON.stringify(OMR.packChoices([3, 1, 3])) === '[1,3]' && OMR.packChoices([2]) === 2 && OMR.packChoices([]) === null,
+    'รวมตัวเลือกเป็นค่าที่เก็บได้ถูกต้อง');
+  const d = OMR.decide([0.2, 0.01, 0.18, 0.01, 0.01]);
+  check(d.flag === 'multi' && JSON.stringify(d.marks) === '[0,2]', 'ผลอ่านภาพบอกทุกช่องที่กากบาท (marks)');
+}
+
+console.log('เฉลยหลายคำตอบ: ส่งผ่านลิงก์');
+{
+  const mk = key.slice();
+  mk[0] = [0, 2]; mk[9] = [1, 3, 4];
+  for (const rule of ['any', 'all']) {
+    const back3 = decodeExam(encodeExam(Object.assign({}, exam, { key: mk, multiAnswer: rule })), OMR.TEMPLATES, OMR);
+    check(JSON.stringify(back3.key) === JSON.stringify(mk) && back3.multiAnswer === rule, `เฉลยหลายตัวเลือกและกติกา '${rule}' ครบถ้วน`);
+  }
+  const plain = decodeExam(encodeExam(exam), OMR.TEMPLATES, OMR);
+  check(!('multiAnswer' in plain), 'ชุดข้อสอบเดิมไม่มีกติกาเฉลยหลายคำตอบติดไป');
+  throws(() => decodeExam(enc({ v: 1, t: tpl.id, k: '(AC)B' }), OMR.TEMPLATES, OMR), 'เฉลยหลายตัวเลือกโดยไม่มีกติกาถูกปฏิเสธ');
+  throws(() => decodeExam(enc({ v: 1, t: tpl.id, M: 2, k: '(AA)' }), OMR.TEMPLATES, OMR), 'ตัวเลือกซ้ำถูกปฏิเสธ');
+  throws(() => decodeExam(enc({ v: 1, t: tpl.id, M: 2, k: '(AF)' }), OMR.TEMPLATES, OMR), 'ตัวเลือกเกินจำนวนในแบบฟอร์มถูกปฏิเสธ');
+  throws(() => decodeExam(enc({ v: 1, t: tpl.id, M: 2, k: '(A' }), OMR.TEMPLATES, OMR), 'วงเล็บไม่ครบถูกปฏิเสธ');
+}
+
 console.log(failures ? `\nไม่ผ่าน ${failures} รายการ` : '\nผ่านทั้งหมด');
 process.exit(failures ? 1 : 0);

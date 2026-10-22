@@ -1,7 +1,7 @@
 // รับชุดข้อสอบจากลิงก์/QR code ที่ส่งมาจากอีกเครื่อง
 import { h, icon, toast } from '../ui.js';
 import { appBar, go } from '../nav.js';
-import { getExam, saveExam, examTitle, letterOf, getTemplate, saveTemplate } from '../store.js';
+import { getExam, saveExam, examTitle, letterOf, getTemplate, saveTemplate, multiRuleOf, MULTI_TEXT } from '../store.js';
 import { decodeExam } from '../transfer.js';
 import { requestPersistence } from '../pwa.js';
 
@@ -24,7 +24,8 @@ export async function importView(root, payload) {
   const existing = incoming.id ? await getExam(incoming.id) : null;
   const t = examTitle(incoming);
   const have = incoming.key.slice(0, incoming.questionCount).filter((v) => v != null).length;
-  const keyChanged = existing && JSON.stringify(existing.key) !== JSON.stringify(incoming.key);
+  const keyChanged = existing && (JSON.stringify(existing.key) !== JSON.stringify(incoming.key)
+    || (existing.multiAnswer || null) !== (incoming.multiAnswer || null));
 
   const preview = h('p', { class: 'key-preview' },
     incoming.key.slice(0, incoming.questionCount).map((c, i) => `${i + 1}${letterOf(c, incoming.template) || '–'}`).join('  '));
@@ -36,6 +37,7 @@ export async function importView(root, payload) {
     h('dl', { class: 'import-facts' },
       h('div', null, h('dt', null, 'จำนวนข้อสอบ'), h('dd', null, `${incoming.questionCount} ข้อ`)),
       h('div', null, h('dt', null, 'มีเฉลย'), h('dd', null, `${have} ข้อ`)),
+      multiRuleOf(incoming) ? h('div', null, h('dt', null, 'เฉลยหลายคำตอบ'), h('dd', null, MULTI_TEXT[multiRuleOf(incoming)])) : null,
       h('div', null, h('dt', null, 'จำนวนเลขที่'), h('dd', null, `${incoming.maxStudentNo}`))),
     h('details', { class: 'key-details' }, h('summary', null, 'ดูเฉลยทั้งหมด'), preview),
     existing ? h('p', { class: 'notice notice-warn' },
@@ -61,6 +63,7 @@ export async function importView(root, payload) {
           maxStudentNo: Math.max(existing.maxStudentNo || 0, incoming.maxStudentNo),
         })
         : Object.assign({ hasKeyImage: false, createdAt: new Date().toISOString(), updatedAt: null }, incoming);
+      if (incoming.multiAnswer) exam.multiAnswer = incoming.multiAnswer; else delete exam.multiAnswer;
       await saveExam(exam);
       requestPersistence();
       toast(existing ? 'อัปเดตชุดข้อสอบแล้ว' : 'นำเข้าชุดข้อสอบแล้ว พร้อมตรวจ', 'ok');

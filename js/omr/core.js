@@ -179,13 +179,15 @@
     const top = densities[order[0]];
     const second = order.length > 1 ? densities[order[1]] : 0;
     const third = order.length > 2 ? densities[order[2]] : 0;
-    if (top < o.minInk) return { choice: null, flag: 'blank', cancelled: null };
-    if (second < o.minInk) return { choice: order[0], flag: null, cancelled: null };
+    // ทุกช่องที่มีหมึกถึงเกณฑ์ เรียงตามตัวเลือก (ใช้กับข้อที่เฉลยให้กากบาทได้หลายช่อง)
+    const marks = densities.map((v, i) => (v >= o.minInk ? i : -1)).filter((i) => i >= 0);
+    if (top < o.minInk) return { choice: null, flag: 'blank', cancelled: null, marks };
+    if (second < o.minInk) return { choice: order[0], flag: null, cancelled: null, marks };
     if (top >= o.scribbleInk && top >= second * o.scribbleDominance && third < o.minInk) {
       // ระบายทึบช่องหนึ่งเพื่อยกเลิก แล้วกากบาทอีกช่อง -> ใช้ช่องที่กากบาท แต่ให้ครูยืนยัน
-      return { choice: order[1], flag: 'changed', cancelled: order[0] };
+      return { choice: order[1], flag: 'changed', cancelled: order[0], marks };
     }
-    return { choice: null, flag: 'multi', cancelled: null };
+    return { choice: null, flag: 'multi', cancelled: null, marks };
   }
 
   const FLAG_TEXT = {
@@ -207,20 +209,54 @@
     return 0;
   }
 
+  // ---------------------------------------------------------------------------
+  // เฉลย/คำตอบหลายตัวเลือก
+  //   ค่าคำตอบหนึ่งข้อเป็น null (ไม่มี), index ตัวเลือก หรืออาร์เรย์ index (กากบาทหลายช่อง)
+  //   กติกาเฉลยหลายคำตอบของชุดข้อสอบ (exam.multiAnswer):
+  //     ไม่ตั้ง  เฉลยข้อละ 1 ตัวเลือก (แบบเดิม)
+  //     'any'   เฉลยได้หลายตัวเลือก นักศึกษาตอบตัวเลือกใดตัวเลือกหนึ่งที่เฉลยไว้ก็ถูก (ตอบช่องเดียว)
+  //     'all'   นักศึกษาต้องกากบาทให้ครบทุกตัวเลือกที่เฉลยไว้ และไม่เกิน
+  // ---------------------------------------------------------------------------
+  const MULTI_RULES = ['any', 'all'];
+
+  /** แปลงค่าคำตอบเป็นอาร์เรย์ index ที่ไม่ซ้ำและเรียงแล้ว */
+  function choiceSet(v) {
+    if (v == null) return [];
+    const arr = Array.isArray(v) ? v : [v];
+    return [...new Set(arr.filter((x) => Number.isInteger(x) && x >= 0))].sort((a, b) => a - b);
+  }
+
+  /** รวมกลับเป็นค่าที่เก็บ: ไม่มี -> null, ตัวเดียว -> index, หลายตัว -> อาร์เรย์ */
+  function packChoices(v) {
+    const s = choiceSet(v);
+    return s.length === 0 ? null : s.length === 1 ? s[0] : s;
+  }
+
+  const multiRule = (r) => (MULTI_RULES.includes(r) ? r : null);
+
+  /** คำตอบหนึ่งข้อถูกตามเฉลยหรือไม่ */
+  function isCorrect(keyVal, choice, rule) {
+    const k = choiceSet(keyVal), s = choiceSet(choice);
+    if (!k.length || !s.length) return false;
+    if (k.length > 1 && multiRule(rule) === 'any') return s.length === 1 && k.includes(s[0]);
+    return k.length === s.length && k.every((x, i) => x === s[i]);
+  }
+
   /**
    * คิดคะแนน
-   * key: อาร์เรย์คำตอบที่ถูก (index ตัวเลือก หรือ null) ยาวเท่าจำนวนข้อของแบบฟอร์ม
+   * key: อาร์เรย์เฉลย (index ตัวเลือก อาร์เรย์ index หรือ null) ยาวเท่าจำนวนข้อของแบบฟอร์ม
    * items: อาร์เรย์ { choice, flag, resolved } ของนักศึกษา
+   * rule: กติกาเฉลยหลายคำตอบ ('any' | 'all' | ไม่ตั้ง)
    * ข้อที่ติดธงแต่ยังไม่ยืนยันนับเป็นศูนย์
    */
-  function grade(key, items, count) {
+  function grade(key, items, count, rule) {
     let correct = 0, pending = 0;
     const perQuestion = [];
     for (let i = 0; i < count; i++) {
       const it = items[i] || { choice: null, flag: 'blank', resolved: false };
       const unresolved = !!it.flag && !it.resolved;
       if (unresolved) pending++;
-      const ok = !unresolved && key[i] != null && it.choice === key[i];
+      const ok = !unresolved && isCorrect(key[i], it.choice, rule);
       if (ok) correct++;
       perQuestion.push({ ok, unresolved });
     }
@@ -848,6 +884,10 @@
     LITE_OPTS,
     DEFAULTS,
     FLAG_TEXT,
+    MULTI_RULES,
+    choiceSet,
+    packChoices,
+    isCorrect,
     LATIN,
     THAI,
     LIMITS,

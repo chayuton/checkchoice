@@ -6,8 +6,11 @@ const OMR = self.OMRCore;
 /**
  * mode 'key':    แตะช่องเพื่อเลือก/ยกเลิกเฉลย  -> onChange(newKey)
  * mode 'review': แตะช่องเพื่อแก้คำตอบนักศึกษา, ปุ่ม "ยืนยัน" สำหรับข้อที่ติดธง -> onChange(newItems)
+ * multi: กติกาเฉลยหลายคำตอบ ('any' | 'all' | null)
+ *   โหมดเฉลย: เปิดอยู่ (any/all) แตะช่องเพื่อเพิ่ม/เอาออกทีละตัวเลือก ไม่เช่นนั้นเลือกได้ช่องเดียว
+ *   โหมดตรวจทาน: 'all' แตะเพื่อเพิ่ม/เอาออกทีละตัวเลือก ไม่เช่นนั้นเลือกได้ช่องเดียว
  */
-export function answerGrid({ template, count, mode, key, items, onChange }) {
+export function answerGrid({ template, count, mode, key, items, onChange, multi }) {
   const wrap = h('div', { class: `answer-grid mode-${mode}` });
   wrap.style.setProperty('--choices', String(template.choices));
   const labels = template.choiceLabels;
@@ -28,19 +31,21 @@ export function answerGrid({ template, count, mode, key, items, onChange }) {
     for (let q = start; q <= end; q++) {
       const i = q - 1;
       const it = review ? (items[i] || { choice: null, flag: 'blank', resolved: false }) : null;
-      const chosen = review ? it.choice : key[i];
+      const chosen = OMR.choiceSet(review ? it.choice : key[i]);
       const pending = review && it.flag && !it.resolved;
       const k = key ? key[i] : null;
-      const ok = review && !pending && k != null && chosen === k;
+      const keySet = OMR.choiceSet(k);
+      const ok = review && !pending && OMR.isCorrect(k, it.choice, multi);
+      const toggle = review ? multi === 'all' : !!multi;
       const row = h('div', {
         class: ['grid-row', pending ? 'is-pending' : '', review && !pending ? (ok ? 'is-right' : 'is-wrong') : '',
-          review && it.edited ? 'is-edited' : ''].join(' '),
+          review && it.edited ? 'is-edited' : '', !review && keySet.length > 1 ? 'is-multi' : ''].join(' '),
         id: `q-${q}`,
       });
       row.appendChild(h('div', { class: 'cell cell-no' }, String(q)));
       for (let c = 0; c < template.choices; c++) {
-        const isSel = chosen === c;
-        const isKey = review && k === c;
+        const isSel = chosen.includes(c);
+        const isKey = review && keySet.includes(c);
         const isCancel = review && it.cancelled === c;
         const cls = ['cell', 'cell-choice', isSel ? 'sel' : '', isKey ? 'key' : '', isCancel ? 'cancelled' : ''].join(' ');
         const btn = h('button', {
@@ -49,15 +54,23 @@ export function answerGrid({ template, count, mode, key, items, onChange }) {
           'aria-pressed': isSel ? 'true' : 'false',
           'aria-label': `ข้อ ${q} ตัวเลือก ${labels[c]}${isKey ? ' (เฉลย)' : ''}${isCancel ? ' (ระบายยกเลิก)' : ''}`,
           onclick: () => {
+            const pick = (cur) => {
+              const set = OMR.choiceSet(cur);
+              if (toggle) return OMR.packChoices(set.includes(c) ? set.filter((x) => x !== c) : [...set, c]);
+              return set.length === 1 && set[0] === c ? null : c;
+            };
             if (review) {
               const next = items.map((x) => Object.assign({}, x));
               const cur = next[i] || { choice: null, flag: 'blank' };
-              const same = cur.choice === c && (!cur.flag || cur.resolved);
-              next[i] = Object.assign(cur, { choice: same ? null : c, resolved: true, edited: true });
+              // ข้อที่ยังรอยืนยัน แตะครั้งแรกเริ่มเลือกใหม่จากช่องที่แตะ (ยกเว้นโหมดกากบาทหลายช่องที่แก้ต่อจากเดิม)
+              const settled = !cur.flag || cur.resolved;
+              const base = settled || toggle ? cur.choice : null;
+              const choice = settled || toggle ? pick(base) : c;
+              next[i] = Object.assign(cur, { choice, resolved: true, edited: true });
               onChange(next);
             } else {
               const next = key.slice();
-              next[i] = next[i] === c ? null : c;
+              next[i] = pick(next[i]);
               onChange(next);
             }
           },
@@ -78,7 +91,7 @@ export function answerGrid({ template, count, mode, key, items, onChange }) {
               onChange(next);
             },
           }, 'ยืนยัน');
-        } else if (k == null) {
+        } else if (!keySet.length) {
           status = h('div', { class: 'cell cell-status muted', title: 'ไม่มีเฉลย' }, '–');
         } else {
           status = h('div', { class: `cell cell-status ${ok ? 'right' : 'wrong'}`, 'aria-label': ok ? 'ถูก' : 'ผิด' },

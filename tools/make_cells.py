@@ -68,8 +68,10 @@ def main():
             for qd in sheet['questions']:
                 if not qd.get('confirmed'):
                     continue
+                ch = qd.get('choice')
+                marked = set(ch) if isinstance(ch, list) else ({ch} if ch is not None else set())
                 for c in range(t['choices']):
-                    if qd.get('choice') == c:
+                    if c in marked:
                         label = 'mark'
                     elif qd.get('cancelled') == c:
                         label = 'cancelled'

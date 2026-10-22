@@ -23,7 +23,7 @@ export function reviewPanel({ exam, items, image, geom, studentNo, existing, onC
     `เลขที่ ${studentNo} ตรวจไปแล้ว ได้ ${existing} คะแนน ถ้าบันทึกจะแทนที่ผลเดิม`) : '', sheetWrap || '', pendingSlot, gridSlot);
 
   function render() {
-    const g = OMR.grade(exam.key, state, exam.questionCount);
+    const g = OMR.grade(exam.key, state, exam.questionCount, exam.multiAnswer);
     clear(scoreBox).append(
       h('div', { class: 'score-who' }, `เลขที่ ${studentNo}`),
       h('div', { class: 'score-num' },
@@ -31,7 +31,7 @@ export function reviewPanel({ exam, items, image, geom, studentNo, existing, onC
         h('span', { class: 'score-of' }, `/${g.total}`)),
       h('div', { class: g.pending ? 'score-note pending' : 'score-note ready' },
         g.pending ? `คะแนนชั่วคราว ข้อที่ต้องยืนยันยังนับเป็นศูนย์ (${g.pending} ข้อ)` : 'ยืนยันครบแล้ว พร้อมบันทึก'));
-    if (image) drawSheet(canvas, image, geom, exam.template, { count: exam.questionCount, key: exam.key, items: state, mode: 'review' });
+    if (image) drawSheet(canvas, image, geom, exam.template, { count: exam.questionCount, key: exam.key, items: state, mode: 'review', multi: exam.multiAnswer });
     clear(pendingSlot);
     const pl = pendingList(state, exam.questionCount, () => {
       update(state.map((it, i) => (i < exam.questionCount && it.flag === 'blank' && !it.resolved
@@ -40,7 +40,7 @@ export function reviewPanel({ exam, items, image, geom, studentNo, existing, onC
     if (pl) pendingSlot.appendChild(pl);
     clear(gridSlot).appendChild(answerGrid({
       template: exam.template, count: exam.questionCount, mode: 'review', key: exam.key, items: state,
-      onChange: update,
+      multi: exam.multiAnswer, onChange: update,
     }));
   }
 

@@ -1,5 +1,5 @@
 // การติดตั้งเป็นแอปบนหน้าจอหลัก และการขอพื้นที่เก็บข้อมูลถาวร
-export const APP_VERSION = '1.4.0';
+export const APP_VERSION = '1.5.0';
 export const REPO_URL = 'https://github.com/chayuton/checkchoice';
 
 export const install = { prompt: null, listeners: new Set() };

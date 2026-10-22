@@ -18,8 +18,17 @@ function fromBase64Url(s) {
   return out;
 }
 
+/** เฉลยหนึ่งข้อเป็นข้อความ: ไม่มี '-', ตัวเดียว 'A', หลายตัวเลือก '(AC)' */
+function keyToken(v) {
+  const set = (Array.isArray(v) ? v : v == null ? [] : [v]).filter((c) => Number.isInteger(c) && c >= 0 && c < LETTERS.length);
+  const uniq = [...new Set(set)].sort((a, b) => a - b);
+  if (!uniq.length) return '-';
+  const letters = uniq.map((c) => LETTERS[c]).join('');
+  return uniq.length === 1 ? letters : `(${letters})`;
+}
+
 export function encodeExam(exam) {
-  const key = exam.key.map((c) => (c == null ? '-' : LETTERS[c])).join('').replace(/-+$/, '');
+  const key = exam.key.map(keyToken).join('').replace(/-+$/, '');
   const data = {
     v: VERSION,
     i: exam.id,
@@ -31,6 +40,9 @@ export function encodeExam(exam) {
     m: exam.maxStudentNo,
     k: key,
   };
+  // กติกาเฉลยหลายคำตอบ: 1 = ตอบตัวเลือกใดก็ได้ที่เฉลย, 2 = ต้องกากบาทครบทุกตัวเลือก
+  if (exam.multiAnswer === 'any') data.M = 1;
+  else if (exam.multiAnswer === 'all') data.M = 2;
   // แบบฟอร์มที่อาจารย์เพิ่มเอง: แนบโครงตารางไปด้วย เครื่องปลายทางจะได้มีแบบฟอร์มนี้
   const t = exam.template;
   if (!t.builtin) {
@@ -66,14 +78,20 @@ export function decodeExam(payload, templates, core) {
   if (!tpl) throw new Error('ไม่รู้จักแบบฟอร์มกระดาษคำตอบในลิงก์นี้');
   const total = tpl.blocks * tpl.rowsPerBlock;
   const keyStr = typeof data.k === 'string' ? data.k : '';
-  if (!/^[A-H-]*$/.test(keyStr) || keyStr.length > total) throw new Error('ข้อมูลเฉลยในลิงก์ไม่ถูกต้อง');
+  const badKey = () => new Error('ข้อมูลเฉลยในลิงก์ไม่ถูกต้อง');
+  if (!/^(?:[A-H-]|\([A-H]{2,8}\))*$/.test(keyStr)) throw badKey();
+  const tokens = keyStr.match(/\([A-H]{2,8}\)|[A-H-]/g) || [];
+  if (tokens.length > total) throw badKey();
   const key = new Array(total).fill(null);
-  for (let i = 0; i < keyStr.length; i++) {
-    if (keyStr[i] === '-') continue;
-    const idx = LETTERS.indexOf(keyStr[i]);
-    if (idx < 0 || idx >= tpl.choices) throw new Error('ข้อมูลเฉลยในลิงก์ไม่ถูกต้อง');
-    key[i] = idx;
-  }
+  tokens.forEach((tok, i) => {
+    if (tok === '-') return;
+    const idxs = tok.replace(/[()]/g, '').split('').map((ch) => LETTERS.indexOf(ch));
+    if (idxs.some((x) => x < 0 || x >= tpl.choices) || new Set(idxs).size !== idxs.length) throw badKey();
+    idxs.sort((a, b) => a - b);
+    key[i] = idxs.length === 1 ? idxs[0] : idxs;
+  });
+  const multi = data.M === 1 ? 'any' : data.M === 2 ? 'all' : null;
+  if (!multi && key.some(Array.isArray)) throw badKey();
   const text = (x, max) => (typeof x === 'string' ? x.trim().slice(0, max) : '');
   const int = (x, lo, hi, d) => (Number.isInteger(x) && x >= lo && x <= hi ? x : d);
   return {
@@ -85,6 +103,7 @@ export function decodeExam(payload, templates, core) {
     questionCount: int(data.q, 1, total, total),
     maxStudentNo: int(data.m, 1, 999, 100),
     key,
+    ...(multi ? { multiAnswer: multi } : {}),
   };
 }
 
