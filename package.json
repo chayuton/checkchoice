@@ -4,7 +4,7 @@
   "private": true,
   "description": "เว็บแอปตรวจข้อสอบปรนัยจากรูปถ่ายกระดาษคำตอบ (PWA)",
   "scripts": {
-    "test": "node tests/omr.test.mjs",
+    "test": "node tests/omr.test.mjs && node tests/transfer.test.mjs",
     "test:e2e": "node tests/e2e.mjs",
     "serve": "python3 -m http.server 8080"
   },

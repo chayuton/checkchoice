@@ -9,6 +9,7 @@ import { drawSheet, displayToCanvas, blobToImage } from '../overlay.js';
 import { pickImage, fileToCanvas, canvasImageData, canvasToBlob } from '../capture.js';
 import { initOMR, readSheet } from '../omr/client.js';
 import { requestPersistence } from '../pwa.js';
+import { openTransferDialog } from '../transfer-ui.js';
 import { errorMessage } from './scan.js';
 
 const OMR = self.OMRCore;
@@ -239,6 +240,13 @@ export async function examView(root, id) {
     btnSave));
 
   if (!isNew) {
+    main.append(h('section', { class: 'form-section' },
+      h('h2', { class: 'section-title' }, 'ใช้ชุดข้อสอบนี้บนเครื่องอื่น'),
+      h('p', { class: 'section-help' }, 'ข้อมูลเก็บแยกในแต่ละเครื่อง ถ้าสร้างเฉลยบนคอมพิวเตอร์แล้วจะตรวจด้วยมือถือ ให้ส่งชุดข้อสอบนี้ไปด้วย QR code หรือลิงก์'),
+      h('div', { class: 'btn-row' }, h('button', { type: 'button', class: 'btn btn-quiet', id: 'btn-transfer', onclick: () => {
+        if (dirty) { toast('บันทึกการแก้ไขก่อน แล้วค่อยส่งไปเครื่องอื่น', 'error'); return; }
+        openTransferDialog(exam).catch((err) => toast(err.message || String(err), 'error'));
+      } }, icon('send'), 'ส่งไปมือถือ / เครื่องอื่น'))));
     main.append(h('section', { class: 'form-section danger-zone' },
       h('h2', { class: 'section-title' }, 'ลบชุดข้อสอบ'),
       h('p', { class: 'section-help' }, `ลบชุดข้อสอบนี้พร้อมผลตรวจ ${resultsCount} คนและรูปทั้งหมดออกจากเครื่อง`),

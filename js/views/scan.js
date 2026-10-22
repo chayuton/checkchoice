@@ -8,12 +8,16 @@ import { reviewPanel } from '../review-panel.js';
 import { displayToCanvas } from '../overlay.js';
 import { pickImage, fileToCanvas, canvasImageData, canvasToBlob, LiveCamera } from '../capture.js';
 import { initOMR, readSheet } from '../omr/client.js';
-import { requestPersistence } from '../pwa.js';
+import { requestPersistence, platform } from '../pwa.js';
+import { transferButton } from '../transfer-ui.js';
 
 export function errorMessage(res) {
   if (res.error === 'not_found') return 'หาตารางคำตอบไม่พบ ถ่ายให้เห็นตารางครบทั้ง 4 มุม ให้ตารางเต็มภาพมากที่สุด และวางกระดาษบนพื้นเรียบ';
   if (res.error === 'grid') return 'พบกรอบตารางแต่แบ่งช่องไม่ได้ ลองถ่ายใหม่ให้ตรงขึ้น ไม่ให้มีเงาหรือนิ้วบังเส้นตาราง';
-  if (res.error === 'opencv') return `โหลดตัวอ่านภาพไม่สำเร็จ ตรวจการเชื่อมต่ออินเทอร์เน็ตแล้วลองอีกครั้ง (${res.message || ''})`;
+  if (res.error === 'opencv') {
+    if (/WebAssembly/.test(res.message || '')) return res.message;
+    return `โหลดตัวอ่านภาพไม่สำเร็จ ตรวจการเชื่อมต่ออินเทอร์เน็ตแล้วลองอีกครั้ง (${res.message || ''})`;
+  }
   return `อ่านภาพไม่สำเร็จ: ${res.message || res.error || 'ไม่ทราบสาเหตุ'}`;
 }
 
@@ -57,6 +61,10 @@ export async function scanView(root, id) {
   if (!keyCount) {
     main.append(h('p', { class: 'notice notice-error' }, 'ชุดข้อสอบนี้ยังไม่มีเฉลย ',
       h('a', { href: `#/exam/${id}` }, 'กำหนดเฉลยก่อน')));
+  } else if (platform() === 'desktop') {
+    main.append(h('div', { class: 'notice desktop-hint' },
+      h('p', null, 'ตรวจด้วยมือถือสะดวกกว่า ส่งชุดข้อสอบนี้ไปมือถือด้วย QR code แล้วถ่ายกระดาษจากมือถือได้เลย'),
+      transferButton(exam, 'btn btn-quiet btn-small')));
   }
 
   // ---------------------------------------------------------------- เลขที่

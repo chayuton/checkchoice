@@ -6,6 +6,9 @@ const pending = new Map();
 
 export function initOMR() {
   if (readyPromise) return readyPromise;
+  if (typeof WebAssembly !== 'object' || !WebAssembly) {
+    return Promise.reject(new Error('เบราว์เซอร์นี้ปิดตัวประมวลผลภาพ (WebAssembly) อยู่ ถ้าใช้ iPhone ให้ปิดโหมดล็อกดาวน์แล้วรีสตาร์ทเครื่อง'));
+  }
   worker = new Worker(new URL('./worker.js', import.meta.url));
   readyPromise = new Promise((resolve, reject) => {
     worker.onmessage = (e) => {

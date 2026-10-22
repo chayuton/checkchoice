@@ -1,7 +1,7 @@
 /* Service worker: เก็บไฟล์แอปไว้ในเครื่องเพื่อใช้งานออฟไลน์
    - ไฟล์ใน vendor/ fonts/ icons/ (ใหญ่และไม่ค่อยเปลี่ยน): ใช้จากแคชก่อน
    - ไฟล์แอปอื่น ๆ: ดึงจากเครือข่ายก่อน (ได้เวอร์ชันล่าสุดเสมอ) ถ้าออฟไลน์ใช้จากแคช */
-const CACHE = 'checkchoice-v1';
+const CACHE = 'checkchoice-v2';
 const SHELL = [
   './',
   'index.html',
@@ -18,6 +18,9 @@ const SHELL = [
   'js/capture.js',
   'js/review-panel.js',
   'js/export.js',
+  'js/env.js',
+  'js/transfer.js',
+  'js/transfer-ui.js',
   'js/omr/core.js',
   'js/omr/client.js',
   'js/omr/worker.js',
@@ -28,8 +31,10 @@ const SHELL = [
   'js/views/result.js',
   'js/views/print.js',
   'js/views/settings.js',
+  'js/views/import.js',
   'vendor/opencv.js',
   'vendor/xlsx.mini.min.js',
+  'vendor/qrcode.mjs',
   'fonts/plex-thai-looped-thai-400.woff2',
   'fonts/plex-thai-looped-thai-500.woff2',
   'fonts/plex-thai-looped-thai-600.woff2',

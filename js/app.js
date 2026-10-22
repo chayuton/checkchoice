@@ -8,9 +8,11 @@ import { resultsView } from './views/results.js';
 import { resultView } from './views/result.js';
 import { printView } from './views/print.js';
 import { settingsView } from './views/settings.js';
+import { importView } from './views/import.js';
 import { install } from './pwa.js';
+import { environmentProblems, environmentHelp, PROBLEM } from './env.js';
 
-startRouter([
+const routes = [
   [/^#\/?$/, (root) => homeView(root)],
   [/^#\/exam\/new$/, (root) => examView(root, null)],
   [/^#\/exam\/([\w-]+)$/, (root, id) => examView(root, id)],
@@ -18,8 +20,17 @@ startRouter([
   [/^#\/exam\/([\w-]+)\/results$/, (root, id) => resultsView(root, id)],
   [/^#\/exam\/([\w-]+)\/result\/(\d+)$/, (root, id, no) => resultView(root, id, Number(no))],
   [/^#\/exam\/([\w-]+)\/print$/, (root, id) => printView(root, id)],
+  [/^#\/import\/([A-Za-z0-9_-]+)$/, (root, payload) => importView(root, payload)],
   [/^#\/settings$/, (root) => settingsView(root)],
-]);
+];
+
+// ตรวจความพร้อมของเบราว์เซอร์ก่อนเปิดแอป (เช่น iPhone ที่เปิดโหมดล็อกดาวน์จะไม่มี IndexedDB/WebAssembly)
+environmentProblems().then((problems) => {
+  const root = document.getElementById('app');
+  const storageOk = !problems.includes(PROBLEM.indexedDB) && !problems.includes(PROBLEM.storageBlocked);
+  if (!problems.length) { startRouter(routes); return; }
+  environmentHelp(root, problems, storageOk ? () => startRouter(routes) : null);
+});
 
 // ---------------------------------------------------------------------------
 // Service worker (ใช้งานออฟไลน์)

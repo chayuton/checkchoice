@@ -5,6 +5,9 @@ let dbPromise = null;
 
 export function openDB() {
   if (dbPromise) return dbPromise;
+  if (typeof indexedDB === 'undefined' || indexedDB === null) {
+    return Promise.reject(new Error('เบราว์เซอร์นี้ปิดที่เก็บข้อมูลในเครื่อง (IndexedDB) อยู่ ถ้าใช้ iPhone ให้ปิดโหมดล็อกดาวน์แล้วรีสตาร์ทเครื่อง'));
+  }
   dbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {

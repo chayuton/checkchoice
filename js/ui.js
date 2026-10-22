@@ -65,6 +65,7 @@ const ICONS = {
   edit: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
   next: 'M9 5l7 7-7 7',
   flash: 'M13 3L5 14h6l-1 7 8-11h-6z',
+  send: 'M4 11.5L20 4l-6.5 16-2.8-6.7zM10.7 13.3L20 4',
 };
 export function icon(name, cls = 'icon') {
   return svg('svg', { class: cls, viewBox: '0 0 24 24', 'aria-hidden': 'true' },

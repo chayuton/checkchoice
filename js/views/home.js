@@ -3,6 +3,7 @@ import { h, icon, penX, plural, formatDate } from '../ui.js';
 import { appBar } from '../nav.js';
 import { listExams, listResults, examTitle } from '../store.js';
 import { install, isStandalone, platform } from '../pwa.js';
+import { transferButton } from '../transfer-ui.js';
 
 function emptyState() {
   // ภาพกระดาษคำตอบย่อส่วน เป็นตัวอย่างว่าแอปทำอะไร
@@ -94,7 +95,8 @@ export async function homeView(root) {
             h('span', { class: 'exam-date' }, `แก้ไขล่าสุด ${formatDate(e.updatedAt)}`)),
           h('div', { class: 'exam-actions' },
             h('a', { class: 'btn btn-primary btn-small', href: `#/exam/${e.id}/scan` }, icon('camera'), 'ตรวจกระดาษ'),
-            h('a', { class: 'btn btn-quiet btn-small', href: `#/exam/${e.id}/results` }, icon('table'), 'ผลคะแนน')));
+            h('a', { class: 'btn btn-quiet btn-small', href: `#/exam/${e.id}/results` }, icon('table'), 'ผลคะแนน'),
+            transferButton(e, 'btn btn-quiet btn-small')));
       }))));
   }
 }

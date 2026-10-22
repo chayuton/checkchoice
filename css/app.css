@@ -359,6 +359,23 @@ button, input, select { font: inherit; color: inherit; }
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
 
+/* ------------------------------------------------------------------ ส่งไปเครื่องอื่น / รับชุดข้อสอบ / หน้าช่วยเหลือ */
+.help-steps { margin: 6px 0 10px; padding-left: 1.4em; display: grid; gap: 4px; }
+.help-steps li { padding-left: 2px; }
+.dialog-wide { width: min(94vw, 480px); }
+.qr-box { display: grid; place-items: center; margin: 6px 0 12px; }
+.qr-canvas { display: block; border: 1px solid var(--rule); border-radius: 8px; background: #fff; image-rendering: pixelated; }
+.link-input { font-size: 13px; color: var(--graphite-2); min-height: 40px; }
+.desktop-hint { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; border-left-color: var(--ink); }
+.desktop-hint p { flex: 1 1 240px; }
+.import-facts { display: grid; grid-template-columns: repeat(3, 1fr); margin: 12px 0; border: 1px solid var(--rule); border-radius: 8px; }
+.import-facts div { padding: 8px 10px; border-left: 1px solid var(--rule); }
+.import-facts div:first-child { border-left: 0; }
+.import-facts dt { font-size: 13px; color: var(--muted); }
+.import-facts dd { margin: 0; font-weight: 600; font-size: 18px; }
+.key-details summary { cursor: pointer; color: var(--ink); font-weight: 500; padding: 6px 0; }
+.key-preview { font-size: 14px; color: var(--graphite-2); word-spacing: 4px; line-height: 1.9; }
+
 /* ------------------------------------------------------------------ รายงานสำหรับพิมพ์ */
 .print-tools { max-width: 780px; margin: 0 auto; padding: 16px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .print-tools .hint { text-align: left; width: 100%; }
