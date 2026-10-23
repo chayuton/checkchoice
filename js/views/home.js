@@ -86,7 +86,14 @@ export async function homeView(root) {
         miniSheet([1, 3, 0]),
         h('span', { class: 'choice-text' },
           h('span', { class: 'choice-title' }, 'สร้างเฉลยใหม่'),
-          h('span', { class: 'choice-meta' }, 'เลือกแบบฟอร์มกระดาษคำตอบ แล้วถ่ายรูปใบเฉลย')))));
+          h('span', { class: 'choice-meta' }, 'เลือกแบบฟอร์มกระดาษคำตอบ แล้วถ่ายรูปใบเฉลย'))),
+      // รับชุดข้อสอบที่สร้างไว้บนเครื่องอื่น (เช่น สร้างเฉลยบนคอมพิวเตอร์ แล้วตรวจด้วยมือถือเครื่องนี้)
+      h('a', { class: 'choice choice-receive', href: '#/receive', id: 'choice-receive' },
+        h('span', { class: 'qr-glyph', 'aria-hidden': 'true' }, icon('qr')),
+        h('span', { class: 'choice-text' },
+          h('span', { class: 'choice-title' }, 'รับจากเครื่องอื่น'),
+          h('span', { class: 'choice-meta' }, 'สแกน QR code ชุดข้อสอบที่ส่งมาจากคอมพิวเตอร์หรือมือถืออีกเครื่อง')),
+        icon('next', 'icon chevron'))));
 
   // ชุดข้อสอบที่ใช้ล่าสุด
   if (exams.length) {

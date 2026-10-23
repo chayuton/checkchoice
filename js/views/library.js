@@ -12,7 +12,10 @@ export async function libraryView(root) {
 
   root.append(appBar({
     title: 'คลังเฉลย', back: '#/',
-    actions: [h('a', { class: 'icon-btn', href: '#/exam/new', 'aria-label': 'สร้างเฉลยใหม่' }, icon('plus'))],
+    actions: [
+      h('a', { class: 'icon-btn', href: '#/receive', id: 'library-receive', 'aria-label': 'รับชุดข้อสอบจากเครื่องอื่น (สแกน QR code)' }, icon('qr')),
+      h('a', { class: 'icon-btn', href: '#/exam/new', 'aria-label': 'สร้างเฉลยใหม่' }, icon('plus')),
+    ],
   }));
   const main = h('main', { class: 'page' });
   root.append(main);
@@ -21,7 +24,9 @@ export async function libraryView(root) {
     main.append(h('section', { class: 'empty' },
       h('h2', null, 'ยังไม่มีเฉลยในคลัง'),
       h('p', null, 'สร้างเฉลยใหม่ หรือรับชุดข้อสอบจากเครื่องอื่นด้วย QR code ที่เครื่องนั้น'),
-      h('a', { class: 'btn btn-primary btn-large', href: '#/exam/new' }, icon('plus'), 'สร้างเฉลยใหม่')));
+      h('div', { class: 'btn-row btn-row-center' },
+        h('a', { class: 'btn btn-primary btn-large', href: '#/exam/new' }, icon('plus'), 'สร้างเฉลยใหม่'),
+        h('a', { class: 'btn btn-quiet btn-large', href: '#/receive' }, icon('qr'), 'รับจากเครื่องอื่น'))));
     return;
   }
 

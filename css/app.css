@@ -382,8 +382,44 @@ button, input, select { font: inherit; color: inherit; }
 .help-steps { margin: 6px 0 10px; padding-left: 1.4em; display: grid; gap: 4px; }
 .help-steps li { padding-left: 2px; }
 .dialog-wide { width: min(94vw, 480px); }
-.qr-box { display: grid; place-items: center; margin: 6px 0 12px; }
+.qr-box { display: grid; justify-items: center; gap: 4px; margin: 6px 0 12px; }
 .qr-canvas { display: block; border: 1px solid var(--rule); border-radius: 8px; background: #fff; image-rendering: pixelated; }
+.qr-zoom-btn { display: block; padding: 0; border: 0; background: none; border-radius: 8px; cursor: zoom-in; }
+.qr-zoom-btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.qr-zoom-hint { font-size: 13px; color: var(--muted); }
+/* QR เต็มจอ: พื้นขาวทั้งจอ สแกนจากมือถือได้ง่ายแม้คอมพิวเตอร์เปิดโหมดมืด */
+.qr-full { border: 0; padding: 16px; margin: auto; background: #fff; max-width: 100vw; max-height: 100vh; cursor: zoom-out; }
+.qr-full[open] { display: grid; justify-items: center; gap: 8px; }
+.qr-full::backdrop { background: #fff; }
+.qr-canvas-full { border: 0; }
+.qr-full-hint { color: #4A535A; font-size: 14px; }
+
+/* หน้ารับชุดข้อสอบ: สแกน QR code */
+.receive-intro { color: var(--graphite-2); margin: 4px 0 14px; }
+.qr-scan-box { position: relative; width: min(100%, 440px); aspect-ratio: 1 / 1; margin: 0 auto; background: #0E1113; border-radius: 14px; overflow: hidden; }
+.qr-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.qr-guide { position: absolute; inset: 9%; pointer-events: none; transition: opacity .2s; }
+.qr-corner { position: absolute; width: 18%; height: 18%; border: 0 solid #fff; filter: drop-shadow(0 0 2px rgba(0, 0, 0, .6)); }
+.qr-corner.tl { left: 0; top: 0; border-left-width: 5px; border-top-width: 5px; border-top-left-radius: 12px; }
+.qr-corner.tr { right: 0; top: 0; border-right-width: 5px; border-top-width: 5px; border-top-right-radius: 12px; }
+.qr-corner.bl { left: 0; bottom: 0; border-left-width: 5px; border-bottom-width: 5px; border-bottom-left-radius: 12px; }
+.qr-corner.br { right: 0; bottom: 0; border-right-width: 5px; border-bottom-width: 5px; border-bottom-right-radius: 12px; }
+.qr-scan-box[data-state="found"] .qr-corner { border-color: #3DDC84; }
+.qr-scan-box[data-state="error"] .qr-guide { opacity: .3; }
+.qr-scan-box .live-pill { top: auto; bottom: 12px; }
+.qr-scan-box[data-state="found"] .live-pill { background: #1C7A4C; color: #fff; }
+.receive-under { display: grid; justify-items: center; gap: 8px; max-width: 440px; margin: 10px auto 18px; text-align: center; }
+.receive-status { min-height: 1.5em; font-size: 15px; color: var(--graphite-2); }
+.receive-status:empty { min-height: 0; }
+.receive-status.error { color: var(--red); }
+.receive-status.ok { color: var(--green); font-weight: 600; }
+.receive-section .receive-status { margin-top: 4px; }
+.paste-row { display: flex; gap: 8px; margin-top: 10px; }
+.paste-row .input { flex: 1; min-width: 0; }
+.paste-row + .btn-row { margin: 10px 0 0; }
+.receive-note { margin: 4px 2px 0; }
+.ios-app-note p + p { margin-top: 6px; }
+.ios-app-note .btn-row { margin: 8px 0; }
 .link-input { font-size: 13px; color: var(--graphite-2); min-height: 40px; }
 .limited-notice { border-left-color: var(--hl-edge); margin: 0 0 18px; }
 .status-list { display: grid; gap: 6px; margin: 8px 0; }
@@ -467,6 +503,13 @@ button, input, select { font: inherit; color: inherit; }
 .tool-title { font-weight: 600; }
 .tool-meta { font-size: 14px; color: var(--graphite-2); }
 .icon.chevron { width: 18px; height: 18px; color: var(--muted); }
+.choice-receive { min-height: 0; padding: 12px 14px; gap: 14px; border: 1px solid var(--rule); }
+@media (min-width: 600px) { .choice-receive { grid-column: 1 / -1; } }
+.choice-receive .choice-text { flex: 1; }
+.choice-receive .choice-title { font-size: 17px; }
+.qr-glyph { width: 48px; height: 48px; flex: none; display: grid; place-items: center; border-radius: 10px; background: var(--ink-soft); color: var(--ink); }
+.qr-glyph .icon { width: 30px; height: 30px; }
+.btn-row-center { justify-content: center; }
 
 /* ------------------------------------------------------------------ คลังเฉลย */
 .search-bar { position: sticky; top: calc(60px + env(safe-area-inset-top)); z-index: 5; background: var(--desk); padding: 4px 0 8px; }

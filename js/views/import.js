@@ -3,7 +3,8 @@ import { h, icon, toast } from '../ui.js';
 import { appBar, go } from '../nav.js';
 import { getExam, saveExam, examTitle, letterOf, getTemplate, saveTemplate, multiRuleOf, MULTI_TEXT } from '../store.js';
 import { decodeExam } from '../transfer.js';
-import { requestPersistence } from '../pwa.js';
+import { requestPersistence, platform, isStandalone } from '../pwa.js';
+import { copyText } from '../transfer-ui.js';
 
 const OMR = self.OMRCore;
 
@@ -17,8 +18,25 @@ export async function importView(root, payload) {
     incoming = decodeExam(payload, OMR.TEMPLATES, OMR);
   } catch (err) {
     main.append(h('p', { class: 'notice notice-error' }, err.message),
-      h('a', { class: 'btn btn-quiet', href: '#/' }, 'ไปหน้าแรก'));
+      h('div', { class: 'btn-row' },
+        h('a', { class: 'btn btn-primary', href: '#/receive' }, icon('qr'), 'สแกน QR code ใหม่'),
+        h('a', { class: 'btn btn-quiet', href: '#/' }, 'ไปหน้าแรก')));
     return;
+  }
+
+  // iPhone/iPad: แอปที่เพิ่มไว้บนหน้าจอโฮมเก็บข้อมูลแยกจาก Safari ถ้าลิงก์นี้เปิดใน Safari (เช่น สแกนด้วยแอปกล้อง)
+  // ชุดข้อสอบที่นำเข้าที่นี่จะไม่ไปอยู่ในแอป จึงบอกวิธีพาลิงก์เข้าแอป
+  if (platform() === 'ios' && !isStandalone()) {
+    const linkBox = h('input', { class: 'input link-input', readonly: true, value: location.href, 'aria-label': 'ลิงก์ชุดข้อสอบนี้' });
+    main.append(h('div', { class: 'notice notice-warn ios-app-note', id: 'ios-app-note' },
+      h('p', null, h('strong', null, 'ใช้แอป CheckChoice บนหน้าจอโฮมอยู่หรือเปล่า?'),
+        ' หน้านี้เปิดใน Safari ซึ่งเก็บข้อมูลแยกจากแอป ถ้านำเข้าที่นี่ ชุดข้อสอบจะไม่ไปอยู่ในแอป'),
+      h('p', null, 'ให้คัดลอกลิงก์นี้ เปิดแอป แตะ "รับจากเครื่องอื่น" แล้ววางลิงก์ (หรือสแกน QR code จากในแอปโดยตรง)'),
+      h('div', { class: 'btn-row' },
+        h('button', { type: 'button', class: 'btn btn-quiet btn-small', id: 'btn-copy-import-link', onclick: async () => {
+          toast(await copyText(location.href, linkBox) ? 'คัดลอกลิงก์แล้ว เปิดแอปแล้ววางในหน้ารับจากเครื่องอื่น' : 'คัดลอกไม่ได้ กดค้างที่ลิงก์เพื่อคัดลอกเอง', 'ok');
+        } }, 'คัดลอกลิงก์')),
+      linkBox));
   }
 
   const existing = incoming.id ? await getExam(incoming.id) : null;
