@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OMR = require(path.join(root, 'js/omr/core.js'));
-const { encodeExam, decodeExam, importLink } = await import(path.join(root, 'js/transfer.js'));
+const { encodeExam, encodeExamLegacy, decodeExam, importLink, isQRAlphanumeric } = await import(path.join(root, 'js/transfer.js'));
+const { default: qrcode } = await import(path.join(root, 'vendor/qrcode.mjs'));
 
 let failures = 0;
 const check = (cond, msg) => { if (cond) console.log('  ✓ ' + msg); else { failures++; console.log('  ✗ ' + msg); } };
@@ -59,6 +60,29 @@ console.log('แบบฟอร์มที่เพิ่มเองต้อ�
   check(link2.length < 700, `ลิงก์ยังสั้นพอสำหรับ QR code (${link2.length} ตัวอักษร)`);
   throws(() => decodeExam(enc({ v: 1, t: 'tpl_x1y2z3', T: [20, 60, 9, 1, 1, 0, 1, 'x'], k: '' }), OMR.TEMPLATES, OMR), 'แบบฟอร์มที่เกินขนาดถูกปฏิเสธ');
   throws(() => decodeExam(enc({ v: 1, t: 'tpl_x1y2z3', T: ['5', 20, 5, 2, 1, 0, 1.7, 'x'], k: '' }), OMR.TEMPLATES, OMR), 'ค่าที่ไม่ใช่ตัวเลขถูกปฏิเสธ');
+}
+
+console.log('ลิงก์แบบย่อ (1.6.0) และลิงก์แบบเดิม');
+{
+  const modules = (prefix, payload, alnum) => {
+    const q = qrcode(0, 'L');
+    q.addData(prefix, 'Byte');
+    q.addData(payload, alnum ? 'Alphanumeric' : 'Byte');
+    q.make();
+    return q.getModuleCount();
+  };
+  const prefix = 'https://checkchoice.vercel.app/#/import/';
+  const compact = encodeExam(exam);
+  const legacy = encodeExamLegacy(exam);
+  check(compact[0] === '2' && isQRAlphanumeric(compact), 'ข้อมูลแบบย่อมีแค่ 0–9 และ A–Z (ใช้โหมด Alphanumeric ของ QR ได้)');
+  const mNew = modules(prefix, compact, true), mOld = modules(prefix, legacy, false);
+  check(mNew < mOld, `QR เล็กลง: ${mOld}×${mOld} เหลือ ${mNew}×${mNew} ช่อง`);
+  const fromOld = decodeExam(legacy, OMR.TEMPLATES, OMR);
+  check(JSON.stringify(fromOld.key) === JSON.stringify(exam.key) && fromOld.courseName === exam.courseName,
+    'ลิงก์แบบเดิมจากแอปเวอร์ชันก่อนยังนำเข้าได้');
+  throws(() => decodeExam(compact.slice(0, -12), OMR.TEMPLATES, OMR), 'ลิงก์แบบย่อที่ขาดหายถูกปฏิเสธ');
+  throws(() => decodeExam(`${compact.slice(0, 20)}1${compact.slice(21)}`, OMR.TEMPLATES, OMR), 'ตัวอักษรที่ไม่ใช่ base32 ถูกปฏิเสธ');
+  throws(() => decodeExam('2' + 'A'.repeat(9000), OMR.TEMPLATES, OMR), 'ข้อมูลยาวผิดปกติถูกปฏิเสธ');
 }
 
 console.log('เฉลยหลายคำตอบ: การคิดคะแนน');

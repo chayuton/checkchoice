@@ -66,6 +66,7 @@ const ICONS = {
   next: 'M9 5l7 7-7 7',
   flash: 'M13 3L5 14h6l-1 7 8-11h-6z',
   send: 'M4 11.5L20 4l-6.5 16-2.8-6.7zM10.7 13.3L20 4',
+  qr: 'M3 8V3h5M16 3h5v5M21 16v5h-5M8 21H3v-5M7.5 7.5h3.5v3.5H7.5zM13 7.5h3.5v3.5H13zM7.5 13h3.5v3.5H7.5zM14.5 14.5h.01M16.5 16.5h.01M14.5 16.5h.01M16.5 14.5h.01',
 };
 export function icon(name, cls = 'icon') {
   return svg('svg', { class: cls, viewBox: '0 0 24 24', 'aria-hidden': 'true' },

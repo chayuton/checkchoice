@@ -1,10 +1,12 @@
 // ทดสอบทั้งระบบบนเบราว์เซอร์จริง (Chromium) — รันด้วย `npm run test:e2e`
 // สร้างชุดข้อสอบจากรูปใบเฉลย ตรวจกระดาษ 3 แผ่นด้วยการเลือกรูป, 1 แผ่นด้วยกล้องสด (ถ้ากำหนด FAKE_VIDEO)
 // ส่งออก Excel/ไฟล์สำรอง และทดสอบการเปิดแบบออฟไลน์
+// รับชุดข้อสอบจากเครื่องอื่น: สแกน QR code ด้วยกล้องจำลองในแอป รูปถ่าย QR code และวางลิงก์
 import http from 'node:http';
 import { createReadStream, existsSync, mkdirSync, statSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { chromium } from 'playwright';
 
@@ -21,6 +23,26 @@ const TRUTH = {
   11: 'BCBDABACBAACAAC' + 'DCBDBBBDDBCCBCD' + 'DCACDACCBBBBDAD' + 'DDAADCABADDAAAB',
 };
 const scoreFor = (no, n = 60) => [...TRUTH[no].slice(0, n)].filter((c, i) => c === TRUTH.key[i]).length;
+
+// ---------------------------------------------------------------- QR code ที่ "ส่งมาจากอีกเครื่อง"
+const require = createRequire(import.meta.url);
+const OMR = require(path.join(root, 'js/omr/core.js'));
+const { importLink, encodeExamLegacy } = await import(pathToFileURL(path.join(root, 'js/transfer.js')).href);
+const { qrImage, cameraShot, readJPEG, writeJPEG, writeY4M } = await import(pathToFileURL(path.join(root, 'tests/qr-photo.mjs')).href);
+const sentExam = {
+  id: 'ex_e2esent00000001', courseCode: '04-012-399', courseName: 'สัมมนาเทคโนโลยี', examName: 'สอบย่อยที่ส่งมา',
+  template: OMR.TEMPLATES[0], questionCount: 60, maxStudentNo: 40, key: [...TRUTH.key].map((c) => 'ABCDE'.indexOf(c)),
+};
+const sentLink = importLink(sentExam, 'https://checkchoice.vercel.app/');
+// รูปถ่ายหน้าจอที่มี QR code (ถือเอียงเล็กน้อย) และรูป QR code ของเว็บอื่น
+const qrPhoto = path.join(out, 'qr-photo.jpg');
+writeJPEG(qrPhoto, cameraShot(qrImage(sentLink), { W: 2000, H: 1500, cover: 0.42, tilt: 0.07, rotate: -5, blur: 1, noise: 4, seed: 21 }));
+const otherQrPhoto = path.join(out, 'qr-other.jpg');
+writeJPEG(otherQrPhoto, cameraShot(qrImage('https://example.com/menu?table=12'), { W: 1600, H: 1200, cover: 0.45, seed: 22 }));
+const keyOnPage = (p) => p.$$eval('.answer-grid .grid-row:not(.grid-head)', (rows) => rows.map((r) => {
+  const i = [...r.querySelectorAll('.cell-choice')].findIndex((c) => c.classList.contains('sel'));
+  return i < 0 ? '-' : 'ABCDE'[i];
+}).join(''));
 
 // ---------------------------------------------------------------- เว็บเซิร์ฟเวอร์ไฟล์นิ่ง
 const MIME = {
@@ -132,11 +154,25 @@ try {
     await p.locator('#device-status').waitFor();
     check(/สำรอง/.test(await p.locator('#device-status').innerText()), 'หน้าตั้งค่าบอกว่าใช้ที่เก็บและตัวอ่านภาพสำรอง');
 
+    // รับชุดข้อสอบจากรูปถ่าย QR code: โหมดนี้ไม่มีกล้องสด และอ่าน QR ด้วย jsQR โดยไม่มี JIT
+    await p.goto(base + '#/receive');
+    await p.locator('#btn-qr-photo').waitFor();
+    check(await p.locator('#qr-scan-box').count() === 0 && /btn-primary/.test(await p.locator('#btn-qr-photo').getAttribute('class')),
+      'หน้ารับชุดข้อสอบไม่แสดงกล้องสด และเน้นปุ่มถ่ายรูป QR code แทน');
+    await p.screenshot({ path: path.join(out, '00-lockdown-receive.png'), fullPage: true });
+    t0 = Date.now();
+    await pick('เลือกรูปจากเครื่อง', qrPhoto);
+    await p.waitForURL(/#\/import\//, { timeout: 120000 });
+    const qrMs = Date.now() - t0;
+    await p.locator('#btn-import').click();
+    await p.locator('#student-no').waitFor();
+    check(p.url().includes(`#/exam/${sentExam.id}/scan`), `อ่าน QR code จากรูปถ่ายแล้วนำเข้าชุดข้อสอบได้ (${(qrMs / 1000).toFixed(1)} วินาที ไม่มี JIT)`);
+
     // ปิดโหมดล็อกดาวน์เฉพาะเว็บนี้: ข้อมูลในที่เก็บสำรองย้ายเข้า IndexedDB
     await p.goto(base + '?exclude=1#/');
     await p.locator('#choice-new').waitFor({ timeout: 60000 });
     const moved = await p.evaluate(() => localStorage.getItem('cc.db.v1.exams') === null);
-    check(moved && await p.locator('.exam-item').count() === 1, 'ปิดโหมดล็อกดาวน์เฉพาะเว็บแล้ว ข้อมูลย้ายเข้าที่เก็บปกติครบ');
+    check(moved && await p.locator('.exam-item').count() === 2, 'ปิดโหมดล็อกดาวน์เฉพาะเว็บแล้ว ข้อมูลย้ายเข้าที่เก็บปกติครบ (2 ชุดข้อสอบ)');
     await p.goto(base + `?exclude=1#/exam/${lkExam}/result/1`);
     await p.locator('.score-big').waitFor();
     check(await p.locator('.sheet-figure').count() === 1, 'รูปกระดาษย้ายมาด้วย');
@@ -238,6 +274,20 @@ try {
     'import cv2,sys; im=cv2.imread(sys.argv[1]); im=cv2.copyMakeBorder(im,40,40,40,40,cv2.BORDER_CONSTANT,value=(255,255,255)); t,_,_=cv2.QRCodeDetector().detectAndDecode(im); print(t)',
     path.join(out, 'qr.png')], { encoding: 'utf8' });
   if (dec.status === 0) check(dec.stdout.trim() === link, 'QR code สแกนได้และได้ลิงก์เดียวกัน');
+  check(/#\/import\/2[0-9A-Z]+$/.test(link), 'ลิงก์แบบย่อ (ตัวพิมพ์ใหญ่และตัวเลขล้วน ใช้โหมด Alphanumeric ของ QR code)');
+  await page.locator('#btn-qr-zoom').click();
+  await page.locator('#qr-full').waitFor();
+  const fullSize = await page.locator('#qr-full canvas').evaluate((c) => c.getBoundingClientRect().width);
+  await page.screenshot({ path: path.join(out, '02b-qr-full.png') });
+  await page.locator('#qr-full').click();
+  await page.locator('#qr-full').waitFor({ state: 'detached' });
+  check(fullSize > 300 && await page.locator('#transfer-dialog').isVisible(),
+    `แตะ QR code แล้วขยายเต็มจอ (${Math.round(fullSize)} px) แตะอีกครั้งกลับมาที่กล่องเดิม`);
+  // กล้องมือถืออีกเครื่องที่เล็งมายัง QR บนหน้าจอนี้ (มือสั่นเล็กน้อย เอียง เบลอ และมีสัญญาณรบกวน)
+  const qrOnScreen = readJPEG(await page.locator('#transfer-dialog .qr-canvas').screenshot({ type: 'jpeg', quality: 92 }));
+  const camVideo = path.join(out, 'qr-camera.y4m');
+  writeY4M(camVideo, [0, 1, 2, 3, 4, 5].map((i) => cameraShot(qrOnScreen,
+    { W: 1280, H: 720, cover: 0.5 + i * 0.01, rotate: 4 - i, tilt: 0.05, offset: [0.003 * i, -0.002 * i], blur: 1, noise: 3, seed: 30 + i })));
   await page.getByRole('button', { name: 'เสร็จแล้ว' }).click();
   {
     // อีกเครื่องหนึ่ง = context ใหม่ที่ไม่มีข้อมูลใด ๆ
@@ -260,6 +310,126 @@ try {
     await p2.locator('#btn-import').waitFor();
     check((await p2.locator('#btn-import').innerText()).includes('อัปเดต'), 'เปิดลิงก์ซ้ำ แอปรู้ว่ามีชุดข้อสอบนี้แล้ว');
     await other.close();
+  }
+
+  console.log('รับชุดข้อสอบด้วยการสแกน QR code ในแอป (มือถืออีกเครื่อง กล้องจำลองเล็งที่ QR บนหน้าจอ)');
+  {
+    const camBrowser = await chromium.launch({
+      args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-video-capture=${camVideo}`],
+      env: { ...process.env, LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8' },
+    });
+    const ctx = await camBrowser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'th-TH', permissions: ['camera'] });
+    // จดสตรีมกล้องทุกตัวที่แอปเปิด เพื่อตรวจว่าปิดกล้องแล้วหลังสแกนติด
+    await ctx.addInitScript(() => {
+      const md = navigator.mediaDevices;
+      if (!md || !md.getUserMedia) return;
+      const orig = md.getUserMedia.bind(md);
+      window.__ccStreams = [];
+      md.getUserMedia = async (c) => { const st = await orig(c); window.__ccStreams.push(st); return st; };
+    });
+    const p3 = await ctx.newPage();
+    const errs3 = [];
+    p3.on('pageerror', (e) => errs3.push(e.message));
+    p3.on('console', (m) => { if (m.type() === 'error') errs3.push(m.text()); });
+    await p3.goto(base);
+    await p3.locator('#choice-receive').click();
+    await p3.locator('#qr-scan-box').waitFor();
+    const t0 = Date.now();
+    await p3.waitForURL(/#\/import\//, { timeout: 30000 });
+    const ms = Date.now() - t0;
+    await p3.locator('#btn-import').waitFor();
+    check(ms < 30000, `สแกน QR code ด้วยกล้องในแอปติดใน ${(ms / 1000).toFixed(1)} วินาที แล้วไปหน้านำเข้าเอง`);
+    check(await p3.evaluate(() => window.__ccStreams.length > 0
+      && window.__ccStreams.every((st) => st.getTracks().every((t) => t.readyState === 'ended'))), 'ปิดกล้องทันทีหลังสแกนติด');
+    await p3.screenshot({ path: path.join(out, '02d-scanned-import.png'), fullPage: true });
+    await p3.locator('#btn-import').click();
+    await p3.locator('#student-no').waitFor();
+    check(p3.url().includes(`#/exam/${examId}/scan`), 'นำเข้าแล้วพร้อมตรวจกระดาษบนมือถือเครื่องนี้');
+    await p3.goto(base + `#/exam/${examId}`);
+    await p3.locator('.answer-grid').waitFor();
+    check(await keyOnPage(p3) === TRUTH.key, 'มือถือที่สแกนได้เฉลยครบ 60 ข้อ ตรงกับต้นฉบับ');
+    check(errs3.length === 0, `ไม่มีข้อผิดพลาดระหว่างสแกน${errs3.length ? ': ' + errs3.join(' | ') : ''}`);
+    await camBrowser.close();
+  }
+
+  console.log('รับชุดข้อสอบด้วยลิงก์และรูปภาพ');
+  {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'th-TH', permissions: ['camera'] });
+    const p4 = await ctx.newPage();
+    const errs4 = [];
+    p4.on('pageerror', (e) => errs4.push(e.message));
+    p4.on('console', (m) => { if (m.type() === 'error') errs4.push(m.text()); });
+    const statusText = () => p4.locator('#receive-status').textContent();
+    const pickQR = async (file) => {
+      const [chooser] = await Promise.all([p4.waitForEvent('filechooser'), p4.locator('#btn-qr-pick').click()]);
+      await chooser.setFiles(file);
+    };
+    await p4.goto(base + '#/receive');
+    await p4.locator('#receive-link').waitFor();
+    await p4.locator('#receive-link').fill('https://example.com/abc');
+    await p4.locator('#btn-open-link').click();
+    check(/ไม่ใช่ลิงก์ชุดข้อสอบ/.test(await statusText()), 'วางลิงก์เว็บอื่น: บอกว่าไม่ใช่ลิงก์ชุดข้อสอบ');
+    await p4.locator('#receive-link').fill(link.slice(0, -15));
+    await p4.locator('#btn-open-link').click();
+    check(/ไม่ถูกต้องหรือไม่ครบ/.test(await statusText()), 'วางลิงก์ที่คัดลอกมาไม่ครบ: บอกให้คัดลอกใหม่');
+    await pickQR(otherQrPhoto);
+    await p4.waitForFunction(() => /ไม่ใช่ชุดข้อสอบของ CheckChoice/.test(document.getElementById('receive-status').textContent), null, { timeout: 30000 });
+    check(p4.url().endsWith('#/receive'), 'รูป QR code ของเว็บอื่น: บอกว่าไม่ใช่ชุดข้อสอบ และยังอยู่หน้าเดิม');
+    await p4.locator('#receive-link').fill(`ชุดข้อสอบกลางภาค ${link} ส่งจาก CheckChoice`);
+    await p4.locator('#btn-open-link').click();
+    await p4.waitForURL(/#\/import\//);
+    await p4.locator('#btn-import').waitFor();
+    check(/สอบกลางภาค 1\/2569/.test(await p4.locator('main').innerText()), 'วางข้อความที่มีลิงก์ปนอยู่ (คัดลอกจาก LINE) แล้วเปิดหน้านำเข้าได้');
+    await p4.goto(base + '#/receive');
+    await pickQR(qrPhoto);
+    await p4.waitForURL(/#\/import\//, { timeout: 30000 });
+    await p4.locator('#btn-import').waitFor();
+    check(/สอบย่อยที่ส่งมา/.test(await p4.locator('main').innerText()), 'เลือกรูปถ่าย QR code แล้วเปิดหน้านำเข้าชุดข้อสอบที่ถูกต้อง');
+    await p4.goto(base + '#/import/' + encodeExamLegacy(sentExam));
+    await p4.locator('#btn-import').waitFor();
+    check(/สอบย่อยที่ส่งมา/.test(await p4.locator('main').innerText()), 'ลิงก์แบบเดิมจากแอปเวอร์ชันก่อนยังนำเข้าได้');
+    check(errs4.length === 0, `ไม่มีข้อผิดพลาด${errs4.length ? ': ' + errs4.join(' | ') : ''}`);
+    await ctx.close();
+  }
+  {
+    // ตัวอ่าน QR ของเบราว์เซอร์ (BarcodeDetector เช่น Chrome บน Android) จำลองให้อ่านเจอในเฟรมที่ 3
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'th-TH', permissions: ['camera'] });
+    await ctx.addInitScript((text) => {
+      window.__bdCalls = [];
+      window.BarcodeDetector = class {
+        static async getSupportedFormats() { return ['qr_code', 'ean_13']; }
+        async detect(src) {
+          window.__bdCalls.push(src && src.tagName);
+          return window.__bdCalls.length >= 3 ? [{ rawValue: text, format: 'qr_code' }] : [];
+        }
+      };
+    }, sentLink);
+    const p5 = await ctx.newPage();
+    await p5.goto(base + '#/receive');
+    await p5.waitForURL(/#\/import\//, { timeout: 15000 });
+    const calls = await p5.evaluate(() => window.__bdCalls);
+    check(calls.length >= 3 && calls.every((t) => t === 'VIDEO'), `ใช้ตัวอ่าน QR ของเบราว์เซอร์กับภาพจากกล้องเมื่อมี (${calls.length} เฟรม)`);
+    await ctx.close();
+  }
+  {
+    // iPhone: ลิงก์ที่เปิดใน Safari (เช่น สแกนด้วยแอปกล้อง) บอกวิธีพาชุดข้อสอบเข้าแอปบนหน้าจอโฮม
+    const iosUA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+    const opts = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'th-TH', userAgent: iosUA };
+    const safari = await browser.newContext(opts);
+    const p6 = await safari.newPage();
+    await p6.goto(importLink(sentExam, base));
+    await p6.locator('#btn-import').waitFor();
+    check(await p6.locator('#ios-app-note').isVisible() && await p6.locator('#btn-copy-import-link').isVisible(),
+      'iPhone (Safari): บอกว่า Safari เก็บข้อมูลแยกจากแอปบนหน้าจอโฮม พร้อมปุ่มคัดลอกลิงก์ไปวางในแอป');
+    await p6.screenshot({ path: path.join(out, '02e-import-ios-safari.png'), fullPage: true });
+    const app = await browser.newContext(opts);
+    await app.addInitScript(() => Object.defineProperty(navigator, 'standalone', { get: () => true }));
+    const p7 = await app.newPage();
+    await p7.goto(importLink(sentExam, base));
+    await p7.locator('#btn-import').waitFor();
+    check(await p7.locator('#ios-app-note').count() === 0, 'เปิดในแอปบนหน้าจอโฮมแล้ว ไม่แสดงคำแนะนำนี้');
+    await safari.close();
+    await app.close();
   }
   console.log('ลบทั้งรายวิชาในที่เก็บสำรอง (เบราว์เซอร์ที่ไม่มี IndexedDB)');
   {
@@ -622,6 +792,12 @@ try {
   await page.reload();
   await page.locator('.exam-item').first().waitFor({ timeout: 15000 });
   check(true, 'เปิดแอปและเห็นข้อมูลได้ขณะออฟไลน์');
+  // ตัวอ่าน QR code (worker และ jsQR) ต้องมาจากแคชของแอป ใช้ได้แม้ไม่มีอินเทอร์เน็ต
+  await page.goto(base + '#/receive');
+  await chooseFile('เลือกรูปจากเครื่อง', qrPhoto);
+  await page.waitForURL(/#\/import\//, { timeout: 30000 });
+  await page.locator('#btn-import').waitFor();
+  check(/สอบย่อยที่ส่งมา/.test(await page.locator('main').innerText()), 'อ่าน QR code จากรูปได้ขณะออฟไลน์');
   await context.setOffline(false);
   await shot('10-home');
 

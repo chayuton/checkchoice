@@ -9,6 +9,7 @@ import { resultView } from './views/result.js';
 import { printView } from './views/print.js';
 import { settingsView } from './views/settings.js';
 import { importView } from './views/import.js';
+import { receiveView } from './views/receive.js';
 import { libraryView } from './views/library.js';
 import { templatesView, templateDetailView, templateEditView, templatePrintView } from './views/templates.js';
 import { trainingView } from './views/training.js';
@@ -27,6 +28,7 @@ const routes = [
   [/^#\/exam\/([\w-]+)\/result\/(\d+)$/, (root, id, no) => resultView(root, id, Number(no))],
   [/^#\/exam\/([\w-]+)\/print$/, (root, id) => printView(root, id)],
   [/^#\/import\/([A-Za-z0-9_-]+)$/, (root, payload) => importView(root, payload)],
+  [/^#\/receive$/, (root) => receiveView(root)],
   [/^#\/templates$/, (root) => templatesView(root)],
   [/^#\/templates\/new$/, (root) => templateEditView(root, null)],
   [/^#\/templates\/([\w-]+)\/edit$/, (root, id) => templateEditView(root, id)],

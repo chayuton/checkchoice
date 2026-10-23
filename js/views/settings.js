@@ -114,6 +114,6 @@ export async function settingsView(root) {
   main.append(h('section', { class: 'form-section' },
     h('h2', { class: 'section-title' }, 'เกี่ยวกับ CheckChoice'),
     h('p', { class: 'section-help' }, `เวอร์ชัน ${APP_VERSION} อ่านกระดาษคำตอบบนเครื่องนี้ทั้งหมด รูปและคะแนนไม่ถูกส่งไปที่เซิร์ฟเวอร์ใด`),
-    h('p', { class: 'section-help' }, 'ใช้ OpenCV.js (Apache 2.0), SheetJS (Apache 2.0), qrcode-generator (MIT), fflate (MIT) และฟอนต์ IBM Plex Sans Thai Looped (SIL OFL 1.1)'),
+    h('p', { class: 'section-help' }, 'ใช้ OpenCV.js (Apache 2.0), SheetJS (Apache 2.0), qrcode-generator (MIT), jsQR (Apache 2.0), fflate (MIT) และฟอนต์ IBM Plex Sans Thai Looped (SIL OFL 1.1)'),
     h('p', null, h('a', { class: 'link', href: REPO_URL, target: '_blank', rel: 'noopener' }, 'ซอร์สโค้ดบน GitHub'))));
 }

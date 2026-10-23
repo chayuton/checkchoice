@@ -1,7 +1,43 @@
 // แปลงชุดข้อสอบ (รายวิชา + เฉลย) เป็นลิงก์สั้น ๆ เพื่อส่งไปอีกเครื่องโดยไม่ต้องมีเซิร์ฟเวอร์
 // ลิงก์มีเฉพาะข้อมูลชุดข้อสอบและเฉลย ไม่มีรูปหรือผลตรวจของนักศึกษา
+//
+// รูปแบบข้อมูลหลัง #/import/
+//  แบบย่อ (ตั้งแต่ 1.6.0): "2" + base32 (A–Z, 2–7) ของ JSON ที่บีบอัดด้วย deflate ทุกตัวอักษรอยู่ในโหมด
+//    Alphanumeric ของ QR code จึงได้ QR ที่เล็กและสแกนง่ายกว่าเดิมมาก (ชุด 150 ข้อจาก 89 เหลือ 69 ช่อง)
+//  แบบเดิม (1.5.0 และก่อนหน้า): base64url ของ JSON (ขึ้นต้นด้วย "eyJ") ยังรับได้เหมือนเดิม
+import { deflateSync, inflateSync } from '../vendor/fflate.mjs';
+
 const VERSION = 1;
 const LETTERS = 'ABCDEFGH';
+const COMPACT = '2';
+const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+const MAX_PAYLOAD = 8000;     // ความยาวสูงสุดที่รับ (ลิงก์ที่ยาวที่สุดจริงไม่ถึง 1,500 ตัวอักษร)
+const MAX_JSON = 64 * 1024;   // ขนาดสูงสุดหลังคลายการบีบอัด
+
+function toBase32(bytes) {
+  let out = '', buf = 0, bits = 0;
+  for (let i = 0; i < bytes.length; i++) {
+    buf = (buf << 8) | bytes[i];
+    bits += 8;
+    while (bits >= 5) { bits -= 5; out += B32[(buf >>> bits) & 31]; }
+    buf &= (1 << bits) - 1;
+  }
+  if (bits) out += B32[(buf << (5 - bits)) & 31];
+  return out;
+}
+
+function fromBase32(s) {
+  const out = new Uint8Array(Math.floor((s.length * 5) / 8));
+  let buf = 0, bits = 0, j = 0;
+  for (let i = 0; i < s.length; i++) {
+    const v = B32.indexOf(s[i]);
+    if (v < 0) throw new Error('base32');
+    buf = (buf << 5) | v;
+    bits += 5;
+    if (bits >= 8) { bits -= 8; out[j++] = (buf >>> bits) & 255; buf &= (1 << bits) - 1; }
+  }
+  return out;
+}
 
 function toBase64Url(bytes) {
   let bin = '';
@@ -27,7 +63,8 @@ function keyToken(v) {
   return uniq.length === 1 ? letters : `(${letters})`;
 }
 
-export function encodeExam(exam) {
+/** ข้อมูลชุดข้อสอบที่ใส่ในลิงก์ (ชื่อฟิลด์สั้นเพื่อให้ลิงก์สั้น) */
+export function examData(exam) {
   const key = exam.key.map(keyToken).join('').replace(/-+$/, '');
   const data = {
     v: VERSION,
@@ -49,15 +86,31 @@ export function encodeExam(exam) {
     data.T = [t.blocks, t.rowsPerBlock, t.choices, t.headerRows, t.numberColumn ? 1 : 0, t.order === 'across' ? 1 : 0,
       Math.round((t.aspect || 0) * 1000) / 1000, t.name || ''];
   }
-  return toBase64Url(new TextEncoder().encode(JSON.stringify(data)));
+  return data;
 }
+
+/** ข้อมูลหลัง #/import/ แบบย่อ */
+export function encodeExam(exam) {
+  return COMPACT + toBase32(deflateSync(new TextEncoder().encode(JSON.stringify(examData(exam))), { level: 9 }));
+}
+
+/** ลิงก์แบบเดิม (1.5.0 และก่อนหน้า) ใช้ทดสอบว่ายังรับลิงก์เก่าได้ */
+export function encodeExamLegacy(exam) {
+  return toBase64Url(new TextEncoder().encode(JSON.stringify(examData(exam))));
+}
+
+/** ข้อมูลหลัง #/import/ ใช้โหมด Alphanumeric ของ QR code ได้ (0–9 A–Z) */
+export const isQRAlphanumeric = (payload) => /^[0-9A-Z]+$/.test(payload);
 
 /** ถอดลิงก์กลับเป็นชุดข้อสอบ ตรวจทุกค่าก่อนใช้ (ลิงก์มาจากภายนอก)
  *  core: OMRCore (ใช้สร้างและตรวจแบบฟอร์มที่แนบมาในลิงก์) */
 export function decodeExam(payload, templates, core) {
   let data;
   try {
-    data = JSON.parse(new TextDecoder().decode(fromBase64Url(payload)));
+    if (typeof payload !== 'string' || !payload || payload.length > MAX_PAYLOAD) throw new Error('length');
+    const bytes = payload[0] === COMPACT ? inflateSync(fromBase32(payload.slice(1))) : fromBase64Url(payload);
+    if (bytes.length > MAX_JSON) throw new Error('size');
+    data = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
   } catch (e) {
     throw new Error('ลิงก์นี้ไม่ถูกต้องหรือไม่ครบ ลองสแกน QR code หรือคัดลอกลิงก์ใหม่');
   }
@@ -109,4 +162,21 @@ export function decodeExam(payload, templates, core) {
 
 export function importLink(exam, base) {
   return `${base}#/import/${encodeExam(exam)}`;
+}
+
+/**
+ * ดึงข้อมูลชุดข้อสอบจากข้อความที่สแกนจาก QR code หรือที่อาจารย์วางมา
+ * รับได้ทั้งลิงก์เต็ม (จากเว็บไหนก็ได้ ใช้เฉพาะส่วนหลัง #/import/) ข้อความที่มีลิงก์ปนอยู่
+ * ลิงก์ที่ถูกเข้ารหัส % และส่วนข้อมูลล้วน คืน null ถ้าไม่ใช่ (ต้องตรวจต่อด้วย decodeExam)
+ */
+export function extractImportPayload(text) {
+  if (typeof text !== 'string') return null;
+  let s = text.trim();
+  if (!s || s.length > 20000) return null;
+  if (/%23|%2F/i.test(s)) {
+    try { s = decodeURIComponent(s); } catch (e) { /* ใช้ข้อความเดิม */ }
+  }
+  const m = s.match(/#\/import\/([A-Za-z0-9_-]+)/);
+  if (m) return m[1];
+  return /^[A-Za-z0-9_-]{20,}$/.test(s) ? s : null;
 }
